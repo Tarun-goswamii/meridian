@@ -10,6 +10,7 @@
 
 import type * as auth from "../auth.js";
 import type * as authFns from "../authFns.js";
+import type * as csv from "../csv.js";
 import type * as http from "../http.js";
 
 import type {
@@ -29,6 +30,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   authFns: typeof authFns;
+  csv: typeof csv;
   http: typeof http;
 }>;
 declare const fullApiWithMounts: typeof fullApi;

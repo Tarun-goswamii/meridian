@@ -28,7 +28,11 @@ export function Navbar() {
             <Button onClick={() => void signOut()}>Sign Out</Button>
           </div>
         ) : (
-          <Button onClick={() => void signIn('github')}>Sign In</Button>
+          <Button
+            onClick={() => void signIn('github', { redirectTo: '/dashboard' })}
+          >
+            Sign In
+          </Button>
         )}
       </div>
     </nav>

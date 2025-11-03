@@ -1,24 +1,14 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { Navbar } from '@/src/components/Navbar'
+import { createFileRoute, Link } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/')({
-  component: Home,
+  component: RouteComponent,
 })
 
-function Home() {
+function RouteComponent() {
   return (
     <div>
-      <Navbar />
-      <main style={{ padding: '2rem' }}>
-        <h1
-          style={{ fontSize: '2rem', fontWeight: 'bold', marginBottom: '1rem' }}
-        >
-          Welcome to My App
-        </h1>
-        <p>
-          This is a simple TanStack Start + Convex + Convex Auth application.
-        </p>
-      </main>
+      <h1>Hello "/"!</h1>
+      <Link to="/dashboard">Dashboard</Link>
     </div>
   )
 }

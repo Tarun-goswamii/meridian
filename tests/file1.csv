@@ -1,0 +1,16 @@
+OrderID,CustomerName,Product,Quantity,UnitPrice,TotalPrice,OrderDate,Shipped,Notes,DiscountCode,SalesRep,Region
+1001,John Doe,Widget A,10,19.99,199.90,2024-05-01,TRUE,First order,,Alice Smith,North
+1002,Jane Smith,Widget B,5,abc,,"2024-05-02",FALSE,Price error,,Bob Lee,South
+1003,王伟,Widget C,3,29.99,89.97,2024-05-03,TRUE,,SPRING24,Charlie Kim,East
+1004,Maria Garcia,Widget D,0,15.00,0.00,2024-05-04,TRUE,Returned item,,Alice Smith,West
+1005,,"Widget E",7,12.50,87.50,2024-05-05,FALSE,No customer name,,Bob Lee,North
+1006,John Doe,Widget F,2,100.00,200.00,2024-05-06,TRUE,High value order,SUMMER50,,South
+1007,Jane Smith,Widget G,1,9.99,9.99,2024-05-07,TRUE,,"",Charlie Kim,East
+1008,王伟,Widget H,4,25.00,100.00,2024-05-08,FALSE,Delayed shipment,,Alice Smith,West
+1009,Maria Garcia,Widget I,,"",,2024-05-09,TRUE,Quantity missing,,Bob Lee,North
+1010,John Doe,Widget J,6,17.50,105.00,2024-05-10,TRUE,Special chars in notes: !@#$%^&*(),,Charlie Kim,South
+1011,Emily Chen,Widget K,8,22.00,176.00,2024-05-11,TRUE,Repeat customer,,Alice Smith,East
+1012,Michael Brown,Widget L,12,18.50,222.00,2024-05-12,TRUE,Large order,,Bob Lee,West
+1013,Sarah Lee,Widget M,5,30.00,150.00,2024-05-13,TRUE,Promo applied,SPRING24,Charlie Kim,North
+1014,David Kim,Widget N,3,27.50,82.50,2024-05-14,TRUE,Quick delivery,,Alice Smith,South
+1015,Ana Silva,Widget O,9,16.75,150.75,2024-05-15,TRUE,First time buyer,,Bob Lee,East

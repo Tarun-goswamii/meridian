@@ -17,6 +17,9 @@ importers:
       '@convex-dev/react-query':
         specifier: ^0.0.0-alpha.11
         version: 0.0.0-alpha.11(@tanstack/react-query@5.90.6(react@19.2.0))(convex@1.28.0(react@19.2.0))(react@19.2.0)(typescript@5.9.3)(zod@4.1.12)
+      '@duckdb/node-api':
+        specifier: 1.4.1-r.4
+        version: 1.4.1-r.4
       '@mantine/code-highlight':
         specifier: ^8.3.6
         version: 8.3.6(@mantine/core@8.3.6(@mantine/hooks@8.3.6(react@19.2.0))(@types/react@19.2.2)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@mantine/hooks@8.3.6(react@19.2.0))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
@@ -47,6 +50,9 @@ importers:
       '@mantine/tiptap':
         specifier: ^8.3.6
         version: 8.3.6(@mantine/core@8.3.6(@mantine/hooks@8.3.6(react@19.2.0))(@types/react@19.2.2)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(@mantine/hooks@8.3.6(react@19.2.0))(@tiptap/extension-link@3.10.1(@tiptap/core@3.10.1(@tiptap/pm@3.10.1))(@tiptap/pm@3.10.1))(@tiptap/react@3.10.1(@floating-ui/dom@1.7.4)(@tiptap/core@3.10.1(@tiptap/pm@3.10.1))(@tiptap/pm@3.10.1)(@types/react-dom@19.2.2(@types/react@19.2.2))(@types/react@19.2.2)(react-dom@19.2.0(react@19.2.0))(react@19.2.0))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
+      '@tabler/icons-react':
+        specifier: ^3.35.0
+        version: 3.35.0(react@19.2.0)
       '@tanstack/react-query':
         specifier: ^5.89.0
         version: 5.90.6(react@19.2.0)
@@ -325,6 +331,37 @@ packages:
     peerDependencies:
       '@tanstack/react-query': ^5.0.0
       convex: ^1.24.8
+
+  '@duckdb/node-api@1.4.1-r.4':
+    resolution: {integrity: sha512-dvlkGZBlQBKzt5CDP2lv8stppufCCxK3RWbRGBjg8KHuGxreLNIKN1uzB4p6qpJuMZsD5N8UJd0dqidoKOZ/cw==}
+
+  '@duckdb/node-bindings-darwin-arm64@1.4.1-r.4':
+    resolution: {integrity: sha512-4ZklLdqX5ZqqR0guwVj5DTTwIEL/o0aqJSWBU4loMbOSAZOLANVMG8+x9YJXI3aJjbQ+90VAzJN3ptJs3X1Ong==}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@duckdb/node-bindings-darwin-x64@1.4.1-r.4':
+    resolution: {integrity: sha512-tSWkNzXRjndWNMWJLJzOymGc8gscG2rwYf7wDm6r+e80f0VwrjP1bcNKB/qdKdmubkz1yRU/TWoVEpaK42266A==}
+    cpu: [x64]
+    os: [darwin]
+
+  '@duckdb/node-bindings-linux-arm64@1.4.1-r.4':
+    resolution: {integrity: sha512-RO7M85r+bK0Cvn9lD+304gFl3V2eHK47qnmlGCu7kFPHCAowGCYosKim9ML5FslD3ZBdghGl4AdNnrtY3i3mgQ==}
+    cpu: [arm64]
+    os: [linux]
+
+  '@duckdb/node-bindings-linux-x64@1.4.1-r.4':
+    resolution: {integrity: sha512-jQKjaje/z35oUdYv7gvCyqZTpsgskgTyt1vyLCnGV/Kwi6UevzorvwEmpvglqxaMONvRQvoGZykfSzHc2ZlS5w==}
+    cpu: [x64]
+    os: [linux]
+
+  '@duckdb/node-bindings-win32-x64@1.4.1-r.4':
+    resolution: {integrity: sha512-IgwffRzZxYmsys6VD3zE3Zd6M9Ld24pNuP/h2eNQL6aY+kRa47R5ULEQ2E8BDFuB+ZIu680XQK5lNG+sW4DTNg==}
+    cpu: [x64]
+    os: [win32]
+
+  '@duckdb/node-bindings@1.4.1-r.4':
+    resolution: {integrity: sha512-dlVzEH1Hizi1LxxiLOs9hpBhvH7mEWQA6ayJ/6NZQbru//UdmjKg27//4+Rbbg2+dF0E9CebOefxlAkKFWi3uA==}
 
   '@emnapi/core@0.45.0':
     resolution: {integrity: sha512-DPWjcUDQkCeEM4VnljEOEcXdAD7pp8zSZsgOujk/LGIwCXWbXJngin+MO4zbH429lzeC3WbYLGjE2MaUOwzpyw==}
@@ -1174,6 +1211,14 @@ packages:
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
     peerDependencies:
       eslint: '>=9.0.0'
+
+  '@tabler/icons-react@3.35.0':
+    resolution: {integrity: sha512-XG7t2DYf3DyHT5jxFNp5xyLVbL4hMJYJhiSdHADzAjLRYfL7AnjlRfiHDHeXxkb2N103rEIvTsBRazxXtAUz2g==}
+    peerDependencies:
+      react: '>= 16'
+
+  '@tabler/icons@3.35.0':
+    resolution: {integrity: sha512-yYXe+gJ56xlZFiXwV9zVoe3FWCGuZ/D7/G4ZIlDtGxSx5CGQK110wrnT29gUj52kEZoxqF7oURTk97GQxELOFQ==}
 
   '@tailwindcss/node@4.1.16':
     resolution: {integrity: sha512-BX5iaSsloNuvKNHRN3k2RcCuTEgASTo77mofW0vmeHkfrDWaoFAFvNHpEgtu0eqyypcyiBkDWzSMxJhp3AUVcw==}
@@ -3483,6 +3528,33 @@ snapshots:
       - typescript
       - zod
 
+  '@duckdb/node-api@1.4.1-r.4':
+    dependencies:
+      '@duckdb/node-bindings': 1.4.1-r.4
+
+  '@duckdb/node-bindings-darwin-arm64@1.4.1-r.4':
+    optional: true
+
+  '@duckdb/node-bindings-darwin-x64@1.4.1-r.4':
+    optional: true
+
+  '@duckdb/node-bindings-linux-arm64@1.4.1-r.4':
+    optional: true
+
+  '@duckdb/node-bindings-linux-x64@1.4.1-r.4':
+    optional: true
+
+  '@duckdb/node-bindings-win32-x64@1.4.1-r.4':
+    optional: true
+
+  '@duckdb/node-bindings@1.4.1-r.4':
+    optionalDependencies:
+      '@duckdb/node-bindings-darwin-arm64': 1.4.1-r.4
+      '@duckdb/node-bindings-darwin-x64': 1.4.1-r.4
+      '@duckdb/node-bindings-linux-arm64': 1.4.1-r.4
+      '@duckdb/node-bindings-linux-x64': 1.4.1-r.4
+      '@duckdb/node-bindings-win32-x64': 1.4.1-r.4
+
   '@emnapi/core@0.45.0':
     dependencies:
       tslib: 2.8.1
@@ -4117,6 +4189,13 @@ snapshots:
       espree: 10.4.0
       estraverse: 5.3.0
       picomatch: 4.0.3
+
+  '@tabler/icons-react@3.35.0(react@19.2.0)':
+    dependencies:
+      '@tabler/icons': 3.35.0
+      react: 19.2.0
+
+  '@tabler/icons@3.35.0': {}
 
   '@tailwindcss/node@4.1.16':
     dependencies:

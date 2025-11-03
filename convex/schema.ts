@@ -11,4 +11,12 @@ export default defineSchema({
   numbers: defineTable({
     value: v.number(),
   }),
+  files: defineTable({
+    storageId: v.string(),
+    fileName: v.string(),
+    fileType: v.string(),
+    fileSize: v.number(),
+    uploadedBy: v.string(),
+    uploadedAt: v.number(),
+  }).index('by_uploadedBy', ['uploadedBy']),
 })

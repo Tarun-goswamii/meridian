@@ -7,8 +7,11 @@ import {
 import * as React from 'react'
 import type { QueryClient } from '@tanstack/react-query'
 import { MantineProvider } from '@mantine/core'
+import { Notifications } from '@mantine/notifications'
 
 import '@mantine/core/styles.css'
+import '@mantine/notifications/styles.css'
+import '@mantine/dropzone/styles.css'
 
 export const Route = createRootRouteWithContext<{
   queryClient: QueryClient
@@ -67,7 +70,10 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body>
-        <MantineProvider>{children}</MantineProvider>
+        <MantineProvider>
+          <Notifications />
+          {children}
+        </MantineProvider>
 
         <Scripts />
       </body>
