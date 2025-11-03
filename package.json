@@ -14,6 +14,8 @@
     "lint": "tsc && eslint .  --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
   },
   "dependencies": {
+    "@auth/core": "0.37.0",
+    "@convex-dev/auth": "^0.0.90",
     "@convex-dev/react-query": "^0.0.0-alpha.11",
     "@mantine/code-highlight": "^8.3.6",
     "@mantine/core": "^8.3.6",
@@ -42,6 +44,7 @@
     "@convex-dev/eslint-plugin": "^1.0.0",
     "@tailwindcss/vite": "^4.1.13",
     "@tanstack/eslint-config": "^0.3.2",
+    "@types/node": "^24.9.2",
     "@types/react": "^19.1.13",
     "@types/react-dom": "^19.1.9",
     "@vitejs/plugin-react": "^5.0.3",
