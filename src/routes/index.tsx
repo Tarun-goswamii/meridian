@@ -4,7 +4,7 @@ export const Route = createFileRoute('/')({
   component: RouteComponent,
 })
 
-function RouteComponent() {
+async function RouteComponent() {
   return (
     <div>
       <h1>Hello "/"!</h1>
