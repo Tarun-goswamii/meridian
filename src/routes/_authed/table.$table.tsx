@@ -5,6 +5,8 @@ import {
 } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { queryDuckDB } from '~/utils/duckdb'
+import { useAction } from 'convex/react'
+import { api } from '@/convex/_generated/api'
 import {
   useReactTable,
   getCoreRowModel,
@@ -56,10 +58,15 @@ function RouteComponent() {
   const [isExecuting, setIsExecuting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Agent box state (for future use)
+  // Agent box state
   const [agentInput, setAgentInput] = useState('')
   const [isAgentExecuting, setIsAgentExecuting] = useState(false)
   const [agentError, setAgentError] = useState<string | null>(null)
+  const [agentDescription, setAgentDescription] = useState<string | undefined>(
+    undefined,
+  )
+
+  const askClaude = useAction(api.table_agent.askClaude)
 
   const handleExecuteQuery = async () => {
     setIsExecuting(true)
@@ -77,15 +84,38 @@ function RouteComponent() {
     }
   }
 
-  // Placeholder for agent action
+  // Agent action handler
   const handleAgentAction = async () => {
+    if (!agentInput.trim()) return
+
     setIsAgentExecuting(true)
     setAgentError(null)
-    // TODO: Implement agent logic here
-    setTimeout(() => {
+    try {
+      // Get sample rows (first 3 rows as context)
+      const sampleRows = data.rows.slice(0, 3)
+
+      const response = await askClaude({
+        prompt: agentInput,
+        tableName: table,
+        columns: data.columns,
+        sampleRows: sampleRows,
+      })
+
+      // Set the command in the query editor
+      setQuery(response.command)
+
+      // Set the description to display
+      setAgentDescription(response.description)
+
+      // Clear the agent input
+      setAgentInput('')
+    } catch (err) {
+      setAgentError(
+        err instanceof Error ? err.message : 'Failed to get agent response',
+      )
+    } finally {
       setIsAgentExecuting(false)
-      setAgentError('Agent functionality not implemented yet.')
-    }, 500)
+    }
   }
 
   const columns = useMemo<ColumnDef<Record<string, any>>[]>(
@@ -216,6 +246,7 @@ function RouteComponent() {
             error={agentError}
             onErrorClose={() => setAgentError(null)}
             isExecuting={isAgentExecuting}
+            description={agentDescription}
           />
         </Group>
       </Box>

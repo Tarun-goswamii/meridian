@@ -7,6 +7,7 @@ import {
   Textarea,
   Button,
   Alert,
+  Box,
 } from '@mantine/core'
 import { IconTerminal, IconPlayerPlay } from '@tabler/icons-react'
 
@@ -17,6 +18,7 @@ interface AgentEditorProps {
   error: string | null
   onErrorClose: () => void
   isExecuting: boolean
+  description?: string
 }
 
 export function AgentEditor({
@@ -26,6 +28,7 @@ export function AgentEditor({
   error,
   onErrorClose,
   isExecuting,
+  description,
 }: AgentEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -66,6 +69,20 @@ export function AgentEditor({
           >
             {error}
           </Alert>
+        )}
+        {description && (
+          <Box
+            p="xs"
+            style={{
+              backgroundColor: 'var(--mantine-color-blue-light)',
+              borderRadius: 'var(--mantine-radius-sm)',
+              border: '1px solid var(--mantine-color-blue-light-color)',
+            }}
+          >
+            <Text size="sm" c="dimmed">
+              {description}
+            </Text>
+          </Box>
         )}
         <Textarea
           ref={textareaRef}
