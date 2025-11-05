@@ -1,4 +1,8 @@
-import { queryOptions, useSuspenseQuery } from '@tanstack/react-query'
+import {
+  queryOptions,
+  useQueryClient,
+  useSuspenseQuery,
+} from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { queryDuckDB } from '~/utils/duckdb'
 import {
@@ -7,7 +11,7 @@ import {
   flexRender,
   type ColumnDef,
 } from '@tanstack/react-table'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import {
   Title,
   Table,
@@ -19,7 +23,8 @@ import {
   Card,
   Divider,
 } from '@mantine/core'
-
+import { QueryEditor } from '~/components/QueryEditor'
+import { AgentEditor } from '~/components/AgentEditor'
 type TableData = {
   columns: { name: string; type: string }[]
   rows: Record<string, any>[]
@@ -43,8 +48,45 @@ export const Route = createFileRoute('/_authed/table/$table')({
 
 function RouteComponent() {
   const { table } = Route.useParams()
+  const queryClient = useQueryClient()
   const tableQuery = useSuspenseQuery(tableQueryOptions(table))
   const data = tableQuery.data
+
+  const [query, setQuery] = useState(`SELECT * FROM ${table}`)
+  const [isExecuting, setIsExecuting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  // Agent box state (for future use)
+  const [agentInput, setAgentInput] = useState('')
+  const [isAgentExecuting, setIsAgentExecuting] = useState(false)
+  const [agentError, setAgentError] = useState<string | null>(null)
+
+  const handleExecuteQuery = async () => {
+    setIsExecuting(true)
+    setError(null)
+    try {
+      // Execute the query
+      await queryDuckDB({ data: query })
+
+      // Invalidate the table query to refresh the data
+      await queryClient.invalidateQueries({ queryKey: ['tables', table] })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to execute query')
+    } finally {
+      setIsExecuting(false)
+    }
+  }
+
+  // Placeholder for agent action
+  const handleAgentAction = async () => {
+    setIsAgentExecuting(true)
+    setAgentError(null)
+    // TODO: Implement agent logic here
+    setTimeout(() => {
+      setIsAgentExecuting(false)
+      setAgentError('Agent functionality not implemented yet.')
+    }, 500)
+  }
 
   const columns = useMemo<ColumnDef<Record<string, any>>[]>(
     () =>
@@ -77,7 +119,7 @@ function RouteComponent() {
   })
 
   return (
-    <Box p="lg">
+    <Box p="lg" style={{ position: 'relative', minHeight: '100vh' }}>
       <Card>
         <Group justify="space-between" mb="md">
           <Title order={2}>{table}</Title>
@@ -140,6 +182,43 @@ function RouteComponent() {
           Showing {data.rows.length} row{data.rows.length === 1 ? '' : 's'}
         </Text>
       </Card>
+
+      {/* Persistent Bottom Bar with Two Editors */}
+      <Box
+        style={{
+          position: 'fixed',
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 100,
+          background: 'rgba(255,255,255,0.98)',
+          padding: '16px 24px',
+        }}
+      >
+        <Group
+          align="flex-end"
+          justify="center"
+          gap="xl"
+          style={{ maxWidth: 1200, margin: '0 auto' }}
+        >
+          <QueryEditor
+            query={query}
+            onQueryChange={setQuery}
+            onExecute={handleExecuteQuery}
+            error={error}
+            onErrorClose={() => setError(null)}
+            isExecuting={isExecuting}
+          />
+          <AgentEditor
+            input={agentInput}
+            onInputChange={setAgentInput}
+            onExecute={handleAgentAction}
+            error={agentError}
+            onErrorClose={() => setAgentError(null)}
+            isExecuting={isAgentExecuting}
+          />
+        </Group>
+      </Box>
     </Box>
   )
 }

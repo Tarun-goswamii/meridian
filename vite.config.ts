@@ -16,4 +16,7 @@ export default defineConfig({
     tanstackStart(),
     viteReact(),
   ],
+  optimizeDeps: {
+    exclude: ['@duckdb/node-bindings'],
+  },
 })

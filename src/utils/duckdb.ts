@@ -10,6 +10,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 
 let duckDBInstance: DuckDBInstance | null = null
+// let duckDBInstance: null = null
 
 export const getDuckDB = createServerOnlyFn(async () => {
   if (!duckDBInstance) {
