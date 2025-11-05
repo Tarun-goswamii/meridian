@@ -85,26 +85,16 @@ export function QueryEditor({
       }}
     >
       <Stack gap="sm">
-        <Group gap="xs" justify="space-between" align="center">
+        <Group justify="space-between" align="center">
           <Group gap="xs">
             <IconTerminal
               size={18}
               style={{ color: 'var(--mantine-color-blue-6)' }}
             />
-            <Text fw={600} size="sm">
+            <Text fw={600} size="xs">
               DuckDB Query Editor
             </Text>
           </Group>
-          <Button
-            leftSection={<IconPlayerPlay size={16} />}
-            onClick={onExecute}
-            loading={isExecuting}
-            disabled={!query.trim()}
-            size="sm"
-            variant="filled"
-          >
-            Execute
-          </Button>
         </Group>
 
         {error && (
@@ -146,7 +136,7 @@ export function QueryEditor({
                 border: '1px solid rgba(0, 0, 0, 0.1)',
                 borderRadius: '12px',
                 minHeight: '60px',
-                maxHeight: '200px',
+                maxHeight: '120px',
                 resize: 'none',
                 overflow: 'auto',
                 '&:focus': {
@@ -163,10 +153,16 @@ export function QueryEditor({
           <Text size="xs" c="dimmed">
             Press Ctrl+Enter (Cmd+Enter on Mac) to execute query
           </Text>
-          <Text size="xs" c="dimmed">
-            {query.split('\n').length} line
-            {query.split('\n').length !== 1 ? 's' : ''}
-          </Text>
+          <Button
+            leftSection={<IconPlayerPlay size={16} />}
+            onClick={onExecute}
+            loading={isExecuting}
+            disabled={!query.trim()}
+            size="xs"
+            variant="filled"
+          >
+            Execute
+          </Button>
         </Group>
       </Stack>
     </Box>

@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import {
   Stack,
   Group,
@@ -10,12 +10,141 @@ import {
   ScrollArea,
   Avatar,
   Divider,
+  Collapse,
+  ActionIcon,
 } from '@mantine/core'
-import { IconSparkles, IconPlayerPlay, IconUser } from '@tabler/icons-react'
+import {
+  IconSparkles,
+  IconPlayerPlay,
+  IconUser,
+  IconChevronDown,
+  IconChevronUp,
+  IconCode,
+} from '@tabler/icons-react'
 
 interface Message {
   role: 'user' | 'assistant'
   content: string
+  command?: string
+}
+
+interface MessagePairProps {
+  user: Message
+  assistant?: Message
+}
+
+function MessagePair({ user, assistant }: MessagePairProps) {
+  const [commandExpanded, setCommandExpanded] = useState(false)
+
+  return (
+    <Box
+      p="sm"
+      style={{
+        backgroundColor: 'rgb(243, 243, 243)',
+        backdropFilter: 'blur(10px)',
+        WebkitBackdropFilter: 'blur(10px)',
+        borderRadius: 'var(--mantine-radius-md)',
+        border: '1px solid rgba(0, 0, 0, 0.15)',
+        overflow: 'hidden',
+      }}
+    >
+      <Stack gap="xs">
+        {/* User Query */}
+        <Box>
+          <Group gap="xs" mb={4}>
+            <Avatar size="xs" radius="xl" color="blue" variant="light">
+              <IconUser size={12} />
+            </Avatar>
+            <Text size="xs" fw={500} c="dimmed">
+              You
+            </Text>
+          </Group>
+          <Text
+            size="xs"
+            style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}
+            pl={24}
+          >
+            {user.content}
+          </Text>
+        </Box>
+
+        {/* Assistant Response */}
+        {assistant && (
+          <>
+            <Divider style={{ borderColor: 'rgba(0, 0, 0, 0.1)' }} />
+            <Box>
+              <Group gap="xs" mb={4}>
+                <Avatar size="xs" radius="xl" color="violet" variant="light">
+                  <IconSparkles size={12} />
+                </Avatar>
+                <Text size="xs" fw={500} c="dimmed">
+                  Agent
+                </Text>
+              </Group>
+              <Text
+                size="xs"
+                style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}
+                pl={24}
+              >
+                {assistant.content}
+              </Text>
+
+              {/* Collapsible Command */}
+              {assistant.command && (
+                <Box mt="xs" pl={24}>
+                  <Group
+                    gap="xs"
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => setCommandExpanded(!commandExpanded)}
+                  >
+                    <ActionIcon size="xs" variant="subtle" color="gray">
+                      {commandExpanded ? (
+                        <IconChevronUp size={14} />
+                      ) : (
+                        <IconChevronDown size={14} />
+                      )}
+                    </ActionIcon>
+                    <Group gap={4}>
+                      <IconCode
+                        size={12}
+                        style={{ color: 'var(--mantine-color-gray-6)' }}
+                      />
+                      <Text size="xs" c="dimmed" fw={500}>
+                        SQL Command
+                      </Text>
+                    </Group>
+                  </Group>
+                  <Collapse in={commandExpanded}>
+                    <Box
+                      mt="xs"
+                      p="xs"
+                      style={{
+                        backgroundColor: 'rgba(0, 0, 0, 0.03)',
+                        borderRadius: 'var(--mantine-radius-sm)',
+                        border: '1px solid rgba(0, 0, 0, 0.08)',
+                      }}
+                    >
+                      <Text
+                        size="xs"
+                        style={{
+                          whiteSpace: 'pre-wrap',
+                          lineHeight: 1.6,
+                          fontFamily:
+                            'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
+                        }}
+                      >
+                        {assistant.command}
+                      </Text>
+                    </Box>
+                  </Collapse>
+                </Box>
+              )}
+            </Box>
+          </>
+        )}
+      </Stack>
+    </Box>
+  )
 }
 
 interface AgentEditorProps {
@@ -164,58 +293,25 @@ export function AgentEditor({
               </Box>
             )}
 
-            {messages.map((msg, idx) => (
-              <Group
-                key={idx}
-                align="flex-start"
-                gap="xs"
-                wrap="nowrap"
-                style={{
-                  flexDirection: msg.role === 'user' ? 'row-reverse' : 'row',
-                }}
-              >
-                <Avatar
-                  size="sm"
-                  radius="xl"
-                  color={msg.role === 'user' ? 'blue' : 'violet'}
-                  variant="light"
-                >
-                  {msg.role === 'user' ? (
-                    <IconUser size={16} />
-                  ) : (
-                    <IconSparkles size={16} />
-                  )}
-                </Avatar>
-                <Box
-                  p="xs"
-                  style={{
-                    maxWidth: '85%',
-                    backgroundColor:
-                      msg.role === 'user'
-                        ? 'rgba(59, 130, 246, 0.15)'
-                        : 'rgba(255, 255, 255, 0.4)',
-                    backdropFilter: 'blur(10px)',
-                    WebkitBackdropFilter: 'blur(10px)',
-                    borderRadius: 'var(--mantine-radius-md)',
-                    border:
-                      msg.role === 'user'
-                        ? '1px solid rgba(59, 130, 246, 0.2)'
-                        : '1px solid rgba(255, 255, 255, 0.3)',
-                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
-                  }}
-                >
-                  <Text size="xs" fw={500} mb={4} c="dimmed">
-                    {msg.role === 'user' ? 'You' : 'Agent'}
-                  </Text>
-                  <Text
-                    size="xs"
-                    style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}
-                  >
-                    {msg.content}
-                  </Text>
-                </Box>
-              </Group>
-            ))}
+            {messages
+              .reduce<Array<{ user: Message; assistant?: Message }>>(
+                (acc, msg) => {
+                  if (msg.role === 'user') {
+                    acc.push({ user: msg })
+                  } else if (msg.role === 'assistant' && acc.length > 0) {
+                    acc[acc.length - 1].assistant = msg
+                  }
+                  return acc
+                },
+                [],
+              )
+              .map((pair, idx) => (
+                <MessagePair
+                  key={idx}
+                  user={pair.user}
+                  assistant={pair.assistant}
+                />
+              ))}
 
             {description && messages.length === 0 && (
               <Box

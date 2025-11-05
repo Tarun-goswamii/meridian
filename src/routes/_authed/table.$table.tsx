@@ -24,10 +24,15 @@ import {
   Box,
   Divider,
   Tooltip,
+  ActionIcon,
+  Menu,
+  Checkbox,
+  Button,
 } from '@mantine/core'
 import { QueryEditor } from '~/components/QueryEditor'
 import { AgentEditor } from '~/components/AgentEditor'
-import { Navbar } from '~/components/Navbar'
+import { IconColumns } from '@tabler/icons-react'
+import { useDidUpdate } from '@mantine/hooks'
 
 type TableData = {
   columns: { name: string; type: string }[]
@@ -68,8 +73,17 @@ function RouteComponent() {
   )
   const [threadId, setThreadId] = useState<string | undefined>(undefined)
   const [messages, setMessages] = useState<
-    Array<{ role: 'user' | 'assistant'; content: string }>
+    Array<{ role: 'user' | 'assistant'; content: string; command?: string }>
   >([])
+
+  // Column visibility state for hiding/showing columns
+  const [columnVisibility, setColumnVisibility] = useState<
+    Record<string, boolean>
+  >({})
+
+  // Pagination state for large number of rows
+  const [pageSize, setPageSize] = useState(50)
+  const [pageIndex, setPageIndex] = useState(0)
 
   const askClaude = useAction(api.table_agent.askClaude)
 
@@ -79,6 +93,7 @@ function RouteComponent() {
     try {
       await queryDuckDB({ data: query })
       await queryClient.invalidateQueries({ queryKey: ['tables', table] })
+      setPageIndex(0) // Reset page on query change
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to execute query')
     } finally {
@@ -109,7 +124,11 @@ function RouteComponent() {
       setMessages((prev) => [
         ...prev,
         { role: 'user', content: agentInput },
-        { role: 'assistant', content: response.description },
+        {
+          role: 'assistant',
+          content: response.description,
+          command: response.command,
+        },
       ])
 
       setAgentInput('')
@@ -122,40 +141,55 @@ function RouteComponent() {
     }
   }
 
+  // Table columns with type tooltip and column show/hide support
   const columns = useMemo<ColumnDef<Record<string, any>>[]>(
     () =>
       data.columns.map((col) => ({
         accessorKey: col.name,
         header: () => (
-          <Group gap={6} align="center">
-            <Text
-              fw={600}
-              size="sm"
-              c="gray.9"
-              style={{
-                fontFamily: 'system-ui, -apple-system, sans-serif',
-                letterSpacing: '-0.01em',
-              }}
+          <Group
+            gap={4}
+            align="center"
+            style={{ minWidth: 100, maxWidth: 320, overflow: 'hidden' }}
+          >
+            <Tooltip
+              label={col.type}
+              withArrow
+              position="top"
+              openDelay={300}
+              multiline
+              maw={260}
             >
-              {col.name}
-            </Text>
-            {/* <Tooltip label={col.type} withArrow position="top">
-              <Badge
+              <Text
+                fw={600}
                 size="xs"
-                variant="light"
-                color="gray"
+                c="gray.9"
                 style={{
-                  fontWeight: 500,
-                  textTransform: 'lowercase',
-                  fontFamily:
-                    'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
-                  fontSize: '10px',
-                  padding: '2px 6px',
+                  fontFamily: 'system-ui, -apple-system, sans-serif',
+                  letterSpacing: '-0.01em',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
                 }}
               >
-                {col.type}
-              </Badge>
-            </Tooltip> */}
+                {col.name}
+              </Text>
+            </Tooltip>
+            <Badge
+              size="xs"
+              variant="dot"
+              color="gray"
+              style={{
+                fontWeight: 500,
+                textTransform: 'lowercase',
+                fontFamily:
+                  'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
+                fontSize: '10px',
+                padding: '2px 6px',
+              }}
+            >
+              {col.type}
+            </Badge>
           </Group>
         ),
         cell: (info) => {
@@ -182,28 +216,242 @@ function RouteComponent() {
             !isNaN(parseFloat(stringValue))
           return (
             <Text
-              size="sm"
+              size="xs"
               c={isNumeric ? 'gray.8' : 'gray.9'}
               style={{
                 fontFamily: isNumeric
                   ? 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace'
                   : 'system-ui, -apple-system, sans-serif',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                maxWidth: 260,
                 lineHeight: 1.5,
               }}
+              title={stringValue.length > 60 ? stringValue : undefined}
             >
-              {stringValue}
+              {stringValue.length > 60
+                ? stringValue.slice(0, 60) + '…'
+                : stringValue}
             </Text>
           )
         },
+        enableHiding: true,
       })),
     [data.columns],
   )
 
+  // Handle default column visibility on mount
+  useDidUpdate(() => {
+    // Show all columns if not yet set, or keep what's already set
+    if (Object.keys(columnVisibility).length === 0 && data.columns.length > 0) {
+      // If too many columns, hide some by default
+      if (data.columns.length > 15) {
+        const visible: Record<string, boolean> = {}
+        data.columns.forEach((col, idx) => {
+          visible[col.name] = idx < 12 // Show first 12, hide the rest
+        })
+        setColumnVisibility(visible)
+      } else {
+        setColumnVisibility(
+          Object.fromEntries(data.columns.map((col) => [col.name, true])),
+        )
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.columns])
+
+  // Filter visible columns based on columnVisibility
+  const visibleColumns = useMemo(() => {
+    return columns.filter((col) => {
+      if ('accessorKey' in col && typeof col.accessorKey === 'string') {
+        return columnVisibility[col.accessorKey] !== false
+      }
+      return true
+    })
+  }, [columns, columnVisibility])
+
+  // Pagination logic for large number of rows
+  const paginatedRows = useMemo(() => {
+    if (!data.rows) return []
+    const start = pageIndex * pageSize
+    const end = start + pageSize
+    return data.rows.slice(start, end)
+  }, [data.rows, pageIndex, pageSize])
+
   const reactTable = useReactTable({
-    data: data.rows,
-    columns,
+    data: paginatedRows,
+    columns: visibleColumns,
     getCoreRowModel: getCoreRowModel(),
+    manualPagination: true,
+    pageCount: Math.ceil(data.rows.length / pageSize),
+    state: {
+      pagination: {
+        pageIndex,
+        pageSize,
+      },
+    },
   })
+
+  // Utility for pagination button rendering
+  function PaginationControls() {
+    const totalPages = Math.ceil(data.rows.length / pageSize)
+    const prevDisabled = pageIndex === 0
+    const nextDisabled = pageIndex >= totalPages - 1
+
+    // Only render if more than one page
+    if (totalPages <= 1) return null
+
+    return (
+      <Group gap={8} align="center">
+        <Button
+          variant="subtle"
+          size="xs"
+          onClick={() => setPageIndex(0)}
+          disabled={prevDisabled}
+        >
+          First
+        </Button>
+        <Button
+          variant="subtle"
+          size="xs"
+          onClick={() => setPageIndex((p) => Math.max(0, p - 1))}
+          disabled={prevDisabled}
+        >
+          Prev
+        </Button>
+        <Text size="xs" c="gray.7">
+          Page{' '}
+          <strong>
+            {pageIndex + 1} / {totalPages}
+          </strong>
+        </Text>
+        <Button
+          variant="subtle"
+          size="xs"
+          onClick={() => setPageIndex((p) => Math.min(totalPages - 1, p + 1))}
+          disabled={nextDisabled}
+        >
+          Next
+        </Button>
+        <Button
+          variant="subtle"
+          size="xs"
+          onClick={() => setPageIndex(totalPages - 1)}
+          disabled={nextDisabled}
+        >
+          Last
+        </Button>
+        <Text size="xs" ml={24} c="gray.6">
+          Rows per page:
+        </Text>
+        <select
+          style={{ fontSize: 12, padding: '2px 6px', borderRadius: 4 }}
+          value={pageSize}
+          onChange={(e) => {
+            setPageSize(Number(e.target.value))
+            setPageIndex(0)
+          }}
+        >
+          {[25, 50, 100, 250, 500, 1000].map((sz) => (
+            <option key={sz} value={sz}>
+              {sz}
+            </option>
+          ))}
+        </select>
+      </Group>
+    )
+  }
+
+  // Utility for choosing visible columns with a menu
+  function ColumnsMenu() {
+    if (columns.length <= 10) return null
+    return (
+      <Menu
+        shadow="md"
+        width={260}
+        withinPortal
+        withArrow
+        position="bottom-end"
+        offset={2}
+      >
+        <Menu.Target>
+          <ActionIcon
+            variant="light"
+            color="gray"
+            size="md"
+            style={{ marginLeft: 8 }}
+            aria-label="Show/hide columns"
+          >
+            <IconColumns size={20} />
+          </ActionIcon>
+        </Menu.Target>
+        <Menu.Dropdown style={{ maxHeight: 350, overflowY: 'auto' }}>
+          <Menu.Label>Show/Hide Columns</Menu.Label>
+          {columns.map((col) =>
+            'accessorKey' in col && typeof col.accessorKey === 'string' ? (
+              <Menu.Item
+                key={col.accessorKey}
+                style={{
+                  paddingLeft: 10,
+                  paddingRight: 10,
+                  paddingTop: 2,
+                  paddingBottom: 2,
+                }}
+              >
+                <Checkbox
+                  label={String(col.accessorKey)}
+                  size="xs"
+                  checked={columnVisibility[col.accessorKey] !== false}
+                  onChange={() => {
+                    setColumnVisibility((v) => ({
+                      ...v,
+                      [col.accessorKey]: !(v[col.accessorKey] !== false), // toggle boolean
+                    }))
+                  }}
+                />
+              </Menu.Item>
+            ) : null,
+          )}
+          <Menu.Divider />
+          <Menu.Item
+            color="gray"
+            onClick={() =>
+              setColumnVisibility(
+                Object.fromEntries(
+                  columns.map((col) => [
+                    'accessorKey' in col && typeof col.accessorKey === 'string'
+                      ? col.accessorKey
+                      : '',
+                    true,
+                  ]),
+                ),
+              )
+            }
+          >
+            Show all
+          </Menu.Item>
+          <Menu.Item
+            color="gray"
+            onClick={() =>
+              setColumnVisibility(
+                Object.fromEntries(
+                  columns.map((col) => [
+                    'accessorKey' in col && typeof col.accessorKey === 'string'
+                      ? col.accessorKey
+                      : '',
+                    false,
+                  ]),
+                ),
+              )
+            }
+          >
+            Hide all
+          </Menu.Item>
+        </Menu.Dropdown>
+      </Menu>
+    )
+  }
 
   return (
     <>
@@ -213,7 +461,7 @@ function RouteComponent() {
           minHeight: '100vh',
           display: 'flex',
           flexDirection: 'column',
-          background: '#f8f9fa',
+          // background: '#f8f9fa',
         }}
       >
         {/* Main Content Area */}
@@ -231,15 +479,23 @@ function RouteComponent() {
             style={{
               height: '100%',
               borderRadius: '2px',
+              overflow: 'hidden',
             }}
           >
-            <Group justify="space-between" align="center">
+            <Group justify="space-between" align="center" wrap="nowrap">
               <Group gap="xs">
                 <Title
                   order={2}
                   fw={600}
                   c="gray.9"
-                  style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}
+                  style={{
+                    fontFamily: 'system-ui, -apple-system, sans-serif',
+                    maxWidth: 350,
+                    whiteSpace: 'nowrap',
+                    textOverflow: 'ellipsis',
+                    overflow: 'hidden',
+                  }}
+                  title={table}
                 >
                   {table}
                 </Title>
@@ -256,6 +512,7 @@ function RouteComponent() {
                   {data.columns.length} column
                   {data.columns.length === 1 ? '' : 's'}
                 </Badge>
+                <ColumnsMenu />
               </Group>
               <Badge
                 size="md"
@@ -275,79 +532,122 @@ function RouteComponent() {
             <ScrollArea
               type="auto"
               offsetScrollbars
-              style={{ maxHeight: 'calc(100vh - 280px)' }}
+              style={{
+                maxHeight: 'calc(100vh - 265px)',
+                minHeight: 300,
+                borderRadius: 4,
+                background: 'white',
+                overflow: 'auto',
+              }}
+              scrollbarSize={10}
+              scrollHideDelay={300}
+              h="100%"
+              w="100%"
             >
-              <Table
-                striped
-                highlightOnHover
-                withColumnBorders
-                verticalSpacing="xs"
-                horizontalSpacing="lg"
+              <ScrollArea
+                type="auto"
+                offsetScrollbars
+                scrollHideDelay={300}
                 style={{
-                  borderCollapse: 'separate',
+                  minWidth: Math.max(960, visibleColumns.length * 160),
+                  width: '100%',
+                  overflowX: 'auto',
                 }}
-                styles={{
-                  thead: {
-                    backgroundColor: 'rgba(0, 0, 0, 0.02)',
-                    borderBottom: '2px solid rgba(0, 0, 0, 0.08)',
-                  },
-                  th: {
-                    padding: '12px 16px',
-                    borderBottom: '1px solid rgba(0, 0, 0, 0.06)',
-                    backgroundColor: 'transparent',
-                  },
-                  td: {
-                    padding: '10px 16px',
-                    borderBottom: '1px solid rgba(0, 0, 0, 0.04)',
-                  },
-                  tr: {
-                    '&:hover': {
-                      backgroundColor: 'rgba(0, 0, 0, 0.01)',
-                    },
-                  },
-                }}
+                scrollbarSize={8}
+                h="100%"
               >
-                <thead>
-                  {reactTable.getHeaderGroups().map((headerGroup) => (
-                    <tr key={headerGroup.id}>
-                      {headerGroup.headers.map((header) => (
-                        <th key={header.id}>
-                          {header.isPlaceholder
-                            ? null
-                            : flexRender(
-                                header.column.columnDef.header,
-                                header.getContext(),
-                              )}
-                        </th>
-                      ))}
-                    </tr>
-                  ))}
-                </thead>
-                <tbody>
-                  {reactTable.getRowModel().rows.length === 0 ? (
-                    <tr>
-                      <td colSpan={columns.length}>
-                        <Text c="dimmed" ta="center" py="md">
-                          No data available
-                        </Text>
-                      </td>
-                    </tr>
-                  ) : (
-                    reactTable.getRowModel().rows.map((row) => (
-                      <tr key={row.id}>
-                        {row.getVisibleCells().map((cell) => (
-                          <td key={cell.id}>
-                            {flexRender(
-                              cell.column.columnDef.cell,
-                              cell.getContext(),
-                            )}
-                          </td>
+                <Table
+                  striped
+                  highlightOnHover
+                  withColumnBorders
+                  verticalSpacing="sm"
+                  horizontalSpacing="sm"
+                  style={{
+                    borderCollapse: 'separate',
+                    tableLayout: 'auto',
+                    minWidth:
+                      visibleColumns.length < 8
+                        ? undefined
+                        : visibleColumns.length * 140,
+                    maxWidth: 2600,
+                  }}
+                  styles={{
+                    thead: {
+                      backgroundColor: 'rgba(0, 0, 0, 0.02)',
+                      borderBottom: '2px solid rgba(0, 0, 0, 0.08)',
+                      zIndex: 2,
+                      top: 0,
+                      position: 'sticky',
+                    },
+                    th: {
+                      padding: '8px 10px',
+                      borderBottom: '1px solid rgba(0, 0, 0, 0.06)',
+                      backgroundColor: 'rgba(250,250,250,0.95)',
+                      overflow: 'hidden',
+                      whiteSpace: 'nowrap',
+                      position: 'sticky',
+                      top: 0,
+                      fontSize: 12,
+                      maxWidth: 300,
+                    },
+                    td: {
+                      padding: '7px 10px',
+                      borderBottom: '1px solid rgba(0, 0, 0, 0.04)',
+                      fontSize: 12,
+                      maxWidth: 300,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    },
+                    tr: {
+                      '&:hover': {
+                        backgroundColor: 'rgba(0, 0, 0, 0.01)',
+                      },
+                    },
+                  }}
+                >
+                  <thead>
+                    {reactTable.getHeaderGroups().map((headerGroup) => (
+                      <tr key={headerGroup.id}>
+                        {headerGroup.headers.map((header) => (
+                          <th key={header.id}>
+                            {header.isPlaceholder
+                              ? null
+                              : flexRender(
+                                  header.column.columnDef.header,
+                                  header.getContext(),
+                                )}
+                          </th>
                         ))}
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </Table>
+                    ))}
+                  </thead>
+                  <tbody>
+                    {reactTable.getRowModel().rows.length === 0 ? (
+                      <tr>
+                        <td colSpan={visibleColumns.length}>
+                          <Text c="dimmed" ta="center" py="md">
+                            No data available
+                          </Text>
+                        </td>
+                      </tr>
+                    ) : (
+                      reactTable.getRowModel().rows.map((row) => (
+                        <tr key={row.id}>
+                          {row.getVisibleCells().map((cell) => (
+                            <td key={cell.id}>
+                              {flexRender(
+                                cell.column.columnDef.cell,
+                                cell.getContext(),
+                              )}
+                            </td>
+                          ))}
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </Table>
+              </ScrollArea>
             </ScrollArea>
             <Group
               justify="space-between"
@@ -355,26 +655,30 @@ function RouteComponent() {
               mt="lg"
               pt="md"
               style={{ borderTop: '1px solid rgba(0, 0, 0, 0.06)' }}
+              wrap="nowrap"
             >
-              <Text
-                size="xs"
-                c="gray.6"
-                style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}
-              >
-                Displaying {data.rows.length.toLocaleString()} of{' '}
-                {data.rows.length.toLocaleString()} row
-                {data.rows.length === 1 ? '' : 's'}
-              </Text>
-              <Text
-                size="xs"
-                c="gray.5"
-                style={{
-                  fontFamily:
-                    'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
-                }}
-              >
-                {data.columns.length} × {data.rows.length}
-              </Text>
+              <Group>
+                <Text
+                  size="xs"
+                  c="gray.6"
+                  style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}
+                >
+                  Displaying {paginatedRows.length.toLocaleString()} of{' '}
+                  {data.rows.length.toLocaleString()} row
+                  {data.rows.length === 1 ? '' : 's'}
+                </Text>
+                <Text
+                  size="xs"
+                  c="gray.5"
+                  style={{
+                    fontFamily:
+                      'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
+                  }}
+                >
+                  {visibleColumns.length} × {data.rows.length}
+                </Text>
+              </Group>
+              <PaginationControls />
             </Group>
           </Box>
         </Box>
