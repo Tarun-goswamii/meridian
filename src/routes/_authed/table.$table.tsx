@@ -22,8 +22,8 @@ import {
   Group,
   Badge,
   Box,
-  Card,
   Divider,
+  Tooltip,
 } from '@mantine/core'
 import { QueryEditor } from '~/components/QueryEditor'
 import { AgentEditor } from '~/components/AgentEditor'
@@ -127,20 +127,73 @@ function RouteComponent() {
       data.columns.map((col) => ({
         accessorKey: col.name,
         header: () => (
-          <Group>
-            <Text fw={600}>{col.name}</Text>
+          <Group gap={6} align="center">
+            <Text
+              fw={600}
+              size="sm"
+              c="gray.9"
+              style={{
+                fontFamily: 'system-ui, -apple-system, sans-serif',
+                letterSpacing: '-0.01em',
+              }}
+            >
+              {col.name}
+            </Text>
+            {/* <Tooltip label={col.type} withArrow position="top">
+              <Badge
+                size="xs"
+                variant="light"
+                color="gray"
+                style={{
+                  fontWeight: 500,
+                  textTransform: 'lowercase',
+                  fontFamily:
+                    'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
+                  fontSize: '10px',
+                  padding: '2px 6px',
+                }}
+              >
+                {col.type}
+              </Badge>
+            </Tooltip> */}
           </Group>
         ),
         cell: (info) => {
           const value = info.getValue()
           if (value === null || value === undefined) {
             return (
-              <Text c="gray" fs="italic" size="sm">
+              <Text
+                c="gray.5"
+                fs="italic"
+                size="xs"
+                style={{
+                  fontFamily:
+                    'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
+                }}
+              >
                 NULL
               </Text>
             )
           }
-          return <Text size="sm">{String(value)}</Text>
+          const stringValue = String(value)
+          const isNumeric =
+            !isNaN(Number(value)) &&
+            value !== '' &&
+            !isNaN(parseFloat(stringValue))
+          return (
+            <Text
+              size="sm"
+              c={isNumeric ? 'gray.8' : 'gray.9'}
+              style={{
+                fontFamily: isNumeric
+                  ? 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace'
+                  : 'system-ui, -apple-system, sans-serif',
+                lineHeight: 1.5,
+              }}
+            >
+              {stringValue}
+            </Text>
+          )
         },
       })),
     [data.columns],
@@ -154,88 +207,219 @@ function RouteComponent() {
 
   return (
     <>
-      <Navbar />
-      <Box p="lg" style={{ position: 'relative', minHeight: '100vh' }}>
-        <Card>
-          <Group justify="space-between" mb="md">
-            <Title order={2}>{table}</Title>
-            <Badge color="blue" size="md" variant="light">
-              {data.rows.length} row{data.rows.length === 1 ? '' : 's'}
-            </Badge>
-          </Group>
-          <Divider mb="md" />
-          <ScrollArea type="auto" offsetScrollbars>
-            <Table
-              striped
-              highlightOnHover
-              withColumnBorders
-              verticalSpacing="sm"
-              horizontalSpacing="md"
+      <Box
+        style={{
+          position: 'relative',
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          background: '#f8f9fa',
+        }}
+      >
+        {/* Main Content Area */}
+        <Box
+          style={{
+            flex: 1,
+            padding: '24px',
+            paddingRight: '420px', // Space for sidebar
+            paddingBottom: '180px', // Space for bottom query editor
+            transition: 'padding 0.2s ease',
+          }}
+        >
+          <Box
+            p="xl"
+            style={{
+              height: '100%',
+              borderRadius: '2px',
+            }}
+          >
+            <Group justify="space-between" align="center">
+              <Group gap="xs">
+                <Title
+                  order={2}
+                  fw={600}
+                  c="gray.9"
+                  style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}
+                >
+                  {table}
+                </Title>
+                <Badge
+                  size="sm"
+                  variant="dot"
+                  color="gray"
+                  style={{
+                    fontWeight: 500,
+                    textTransform: 'none',
+                    letterSpacing: '0.01em',
+                  }}
+                >
+                  {data.columns.length} column
+                  {data.columns.length === 1 ? '' : 's'}
+                </Badge>
+              </Group>
+              <Badge
+                size="md"
+                variant="filled"
+                color="blue"
+                style={{
+                  fontWeight: 600,
+                  textTransform: 'none',
+                  letterSpacing: '0.01em',
+                }}
+              >
+                {data.rows.length.toLocaleString()} row
+                {data.rows.length === 1 ? '' : 's'}
+              </Badge>
+            </Group>
+            <Divider mb="xl" style={{ borderColor: 'rgba(0, 0, 0, 0.06)' }} />
+            <ScrollArea
+              type="auto"
+              offsetScrollbars
+              style={{ maxHeight: 'calc(100vh - 280px)' }}
             >
-              <thead>
-                {reactTable.getHeaderGroups().map((headerGroup) => (
-                  <tr key={headerGroup.id}>
-                    {headerGroup.headers.map((header) => (
-                      <th key={header.id}>
-                        {header.isPlaceholder
-                          ? null
-                          : flexRender(
-                              header.column.columnDef.header,
-                              header.getContext(),
-                            )}
-                      </th>
-                    ))}
-                  </tr>
-                ))}
-              </thead>
-              <tbody>
-                {reactTable.getRowModel().rows.length === 0 ? (
-                  <tr>
-                    <td colSpan={columns.length}>
-                      <Text c="dimmed" ta="center" py="md">
-                        No data available
-                      </Text>
-                    </td>
-                  </tr>
-                ) : (
-                  reactTable.getRowModel().rows.map((row) => (
-                    <tr key={row.id}>
-                      {row.getVisibleCells().map((cell) => (
-                        <td key={cell.id}>
-                          {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext(),
-                          )}
-                        </td>
+              <Table
+                striped
+                highlightOnHover
+                withColumnBorders
+                verticalSpacing="xs"
+                horizontalSpacing="lg"
+                style={{
+                  borderCollapse: 'separate',
+                }}
+                styles={{
+                  thead: {
+                    backgroundColor: 'rgba(0, 0, 0, 0.02)',
+                    borderBottom: '2px solid rgba(0, 0, 0, 0.08)',
+                  },
+                  th: {
+                    padding: '12px 16px',
+                    borderBottom: '1px solid rgba(0, 0, 0, 0.06)',
+                    backgroundColor: 'transparent',
+                  },
+                  td: {
+                    padding: '10px 16px',
+                    borderBottom: '1px solid rgba(0, 0, 0, 0.04)',
+                  },
+                  tr: {
+                    '&:hover': {
+                      backgroundColor: 'rgba(0, 0, 0, 0.01)',
+                    },
+                  },
+                }}
+              >
+                <thead>
+                  {reactTable.getHeaderGroups().map((headerGroup) => (
+                    <tr key={headerGroup.id}>
+                      {headerGroup.headers.map((header) => (
+                        <th key={header.id}>
+                          {header.isPlaceholder
+                            ? null
+                            : flexRender(
+                                header.column.columnDef.header,
+                                header.getContext(),
+                              )}
+                        </th>
                       ))}
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </Table>
-          </ScrollArea>
-          <Text mt="md" size="sm" c="gray.6">
-            Showing {data.rows.length} row{data.rows.length === 1 ? '' : 's'}
-          </Text>
-        </Card>
+                  ))}
+                </thead>
+                <tbody>
+                  {reactTable.getRowModel().rows.length === 0 ? (
+                    <tr>
+                      <td colSpan={columns.length}>
+                        <Text c="dimmed" ta="center" py="md">
+                          No data available
+                        </Text>
+                      </td>
+                    </tr>
+                  ) : (
+                    reactTable.getRowModel().rows.map((row) => (
+                      <tr key={row.id}>
+                        {row.getVisibleCells().map((cell) => (
+                          <td key={cell.id}>
+                            {flexRender(
+                              cell.column.columnDef.cell,
+                              cell.getContext(),
+                            )}
+                          </td>
+                        ))}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </Table>
+            </ScrollArea>
+            <Group
+              justify="space-between"
+              align="center"
+              mt="lg"
+              pt="md"
+              style={{ borderTop: '1px solid rgba(0, 0, 0, 0.06)' }}
+            >
+              <Text
+                size="xs"
+                c="gray.6"
+                style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}
+              >
+                Displaying {data.rows.length.toLocaleString()} of{' '}
+                {data.rows.length.toLocaleString()} row
+                {data.rows.length === 1 ? '' : 's'}
+              </Text>
+              <Text
+                size="xs"
+                c="gray.5"
+                style={{
+                  fontFamily:
+                    'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
+                }}
+              >
+                {data.columns.length} × {data.rows.length}
+              </Text>
+            </Group>
+          </Box>
+        </Box>
 
+        {/* Agent Sidebar - Fixed on Right */}
+        <Box
+          style={{
+            position: 'fixed',
+            right: 15,
+            top: 10, // Navbar height (approximate)
+            bottom: 0,
+            width: 400,
+            zIndex: 200,
+            padding: '16px',
+            backgroundColor: 'transparent',
+            display: 'flex',
+            flexDirection: 'column',
+            height: 'calc(100vh - 60px)',
+          }}
+        >
+          <AgentEditor
+            input={agentInput}
+            onInputChange={setAgentInput}
+            onExecute={handleAgentAction}
+            error={agentError}
+            onErrorClose={() => setAgentError(null)}
+            isExecuting={isAgentExecuting}
+            description={agentDescription}
+            messages={messages}
+          />
+        </Box>
+
+        {/* Query Editor - Fixed at Bottom */}
         <Box
           style={{
             position: 'fixed',
             left: 0,
-            right: 0,
+            right: 400, // Space for sidebar
             bottom: 0,
-            zIndex: 100,
-            background: 'rgba(255,255,255,0.98)',
+            zIndex: 150,
             padding: '16px 24px',
+            backgroundColor: 'transparent',
           }}
         >
-          <Group
-            align="flex-end"
-            justify="center"
-            gap="xl"
-            style={{ maxWidth: 1200, margin: '0 auto' }}
-          >
+          <Box style={{ maxWidth: 1400, margin: '0 auto' }}>
             <QueryEditor
               query={query}
               onQueryChange={setQuery}
@@ -244,17 +428,7 @@ function RouteComponent() {
               onErrorClose={() => setError(null)}
               isExecuting={isExecuting}
             />
-            <AgentEditor
-              input={agentInput}
-              onInputChange={setAgentInput}
-              onExecute={handleAgentAction}
-              error={agentError}
-              onErrorClose={() => setAgentError(null)}
-              isExecuting={isAgentExecuting}
-              description={agentDescription}
-              messages={messages}
-            />
-          </Group>
+          </Box>
         </Box>
       </Box>
     </>
