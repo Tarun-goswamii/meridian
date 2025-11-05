@@ -2,7 +2,6 @@ import { api } from '@/convex/_generated/api'
 import { convexQuery } from '@convex-dev/react-query'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { createFileRoute, Outlet } from '@tanstack/react-router'
-import { useEffect } from 'react'
 import Loading from '~/components/Loading'
 import Login from '~/components/Login'
 

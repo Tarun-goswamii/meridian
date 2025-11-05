@@ -21,3 +21,10 @@ export const currentUser = query({
     }
   },
 })
+
+export async function checkAuth(ctx: any) {
+  const user_id = await getAuthUserId(ctx)
+
+  if (!user_id) throw new Error('Not authenticated')
+  return user_id
+}

@@ -1,6 +1,6 @@
-import { getAuthUserId } from '@convex-dev/auth/server'
 import { mutation, query } from './_generated/server'
 import { v } from 'convex/values'
+import { checkAuth } from './authFns'
 
 // Generate a URL for uploading a file
 export const generateUploadUrl = mutation({
@@ -18,11 +18,7 @@ export const saveFile = mutation({
     fileSize: v.number(),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx)
-    console.log('USER ID', userId)
-    if (!userId) {
-      throw new Error('Not authenticated')
-    }
+    const userId = await checkAuth(ctx)
 
     const fileId = await ctx.db.insert('files', {
       storageId: args.storageId,
@@ -41,10 +37,7 @@ export const saveFile = mutation({
 export const getFiles = query({
   args: {},
   handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx)
-    if (!userId) {
-      return []
-    }
+    const userId = await checkAuth(ctx)
 
     const files = await ctx.db
       .query('files')
@@ -64,21 +57,72 @@ export const getFileUrl = query({
   },
 })
 
-// Delete a file
-export const deleteFile = mutation({
+// Get file content for processing
+export const getFileForProcessing = query({
   args: { fileId: v.id('files') },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx)
-    if (!userId) {
-      throw new Error('Not authenticated')
-    }
+    const user_id = await checkAuth(ctx)
 
     const file = await ctx.db.get(args.fileId)
     if (!file) {
       throw new Error('File not found')
     }
 
-    if (file.uploadedBy !== userId) {
+    if (file.uploadedBy !== user_id) {
+      throw new Error('Not authorized to access this file')
+    }
+
+    const url = await ctx.storage.getUrl(file.storageId)
+    if (!url) {
+      throw new Error('File URL not available')
+    }
+
+    return {
+      url,
+      fileName: file.fileName,
+      fileType: file.fileType,
+    }
+  },
+})
+
+// Update file with DuckDB table info
+export const updateDuckDBInfo = mutation({
+  args: {
+    fileId: v.id('files'),
+    tableName: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const user_id = await checkAuth(ctx)
+    const file = await ctx.db.get(args.fileId)
+    if (!file) {
+      throw new Error('File not found')
+    }
+
+    if (file.uploadedBy !== user_id) {
+      throw new Error('Not authorized to update this file')
+    }
+
+    await ctx.db.patch(args.fileId, {
+      duckdbTableName: args.tableName,
+      duckdbProcessed: true,
+    })
+
+    return { success: true }
+  },
+})
+
+// Delete a file
+export const deleteFile = mutation({
+  args: { fileId: v.id('files') },
+  handler: async (ctx, args) => {
+    const user_id = await checkAuth(ctx)
+
+    const file = await ctx.db.get(args.fileId)
+    if (!file) {
+      throw new Error('File not found')
+    }
+
+    if (file.uploadedBy !== user_id) {
       throw new Error('Not authorized to delete this file')
     }
 

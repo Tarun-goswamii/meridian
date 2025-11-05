@@ -18,5 +18,7 @@ export default defineSchema({
     fileSize: v.number(),
     uploadedBy: v.string(),
     uploadedAt: v.number(),
+    duckdbTableName: v.optional(v.string()),
+    duckdbProcessed: v.optional(v.boolean()),
   }).index('by_uploadedBy', ['uploadedBy']),
 })

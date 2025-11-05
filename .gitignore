@@ -29,3 +29,5 @@ app.config.timestamp_*.js
 .zed
 .vscode
 .idea
+*.db
+*.db.wal

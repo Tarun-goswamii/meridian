@@ -3,7 +3,7 @@ import { Navbar } from '@/src/components/Navbar'
 import { useQuery } from '@tanstack/react-query'
 import { convexQuery } from '@convex-dev/react-query'
 import { api } from '@/convex/_generated/api'
-import FileUpload from './components/FileUpload'
+import FileUpload from '../../components/dashboard/FileUpload'
 import {
   Group,
   Text,
@@ -14,8 +14,14 @@ import {
   Button,
   Modal,
   Stack,
+  Badge,
 } from '@mantine/core'
-import { IconFile, IconTrash, IconUpload } from '@tabler/icons-react'
+import {
+  IconFile,
+  IconTrash,
+  IconUpload,
+  IconDatabase,
+} from '@tabler/icons-react'
 import { useMutation } from 'convex/react'
 import { useState } from 'react'
 
@@ -101,7 +107,7 @@ function Home() {
               Uploaded Files
             </Text>
 
-            <List spacing="sm" style={{ display: 'flex', flexWrap: 'wrap' }}>
+            <List style={{ display: 'flex', flexWrap: 'wrap' }}>
               {files.map((file) => (
                 <List.Item
                   key={file._id}
@@ -118,9 +124,21 @@ function Home() {
                 >
                   <Group justify="space-between">
                     <div>
-                      <Text size="sm" fw={500}>
-                        {file.fileName}
-                      </Text>
+                      <Group gap="xs" align="center">
+                        <Text size="sm" fw={500}>
+                          {file.fileName}
+                        </Text>
+                        {file.duckdbProcessed && (
+                          <Badge
+                            size="xs"
+                            leftSection={<IconDatabase size={12} />}
+                            color="green"
+                            variant="light"
+                          >
+                            {file.duckdbTableName}
+                          </Badge>
+                        )}
+                      </Group>
                       <Text size="xs" c="dimmed">
                         {formatFileSize(file.fileSize)} •{' '}
                         {new Date(file.uploadedAt).toLocaleString()}

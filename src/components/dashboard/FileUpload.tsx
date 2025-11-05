@@ -5,6 +5,8 @@ import { useState } from 'react'
 import { api } from '@/convex/_generated/api'
 import { notifications } from '@mantine/notifications'
 import { useMutation } from 'convex/react'
+import { createTableFromCSV } from '@/src/utils/duckdb'
+import { ConvexClient } from 'convex/browser'
 
 interface FileUploadProps {
   onUploadComplete?: () => void
@@ -20,11 +22,18 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
   // Mutation to save file metadata
   const saveFile = useMutation(api.csv.saveFile)
 
+  // Mutation to update DuckDB info
+  const updateDuckDBInfo = useMutation(api.csv.updateDuckDBInfo)
+
   const handleDrop = async (acceptedFiles: File[]) => {
     setUploading(true)
     setUploadProgress(0)
 
     try {
+      // Get Convex URL from environment
+      const CONVEX_URL = (import.meta as any).env.VITE_CONVEX_URL!
+      const convexClient = new ConvexClient(CONVEX_URL)
+
       for (const file of acceptedFiles) {
         // Generate upload URL
         const uploadUrl = await generateUploadUrl({})
@@ -36,17 +45,74 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
           headers: { 'Content-Type': file.type },
           body: file,
         })
-        setUploadProgress(70)
+        setUploadProgress(60)
 
         const { storageId } = await uploadResponse.json()
 
         // Save file metadata
-        await saveFile({
+        const fileId = await saveFile({
           storageId,
           fileName: file.name,
           fileType: file.type,
           fileSize: file.size,
         })
+        setUploadProgress(70)
+
+        // Only process CSV files with DuckDB
+        if (file.type === 'text/csv' || file.name.endsWith('.csv')) {
+          try {
+            // Get the file URL from Convex storage
+            const csvUrl = await convexClient.query(api.csv.getFileUrl, {
+              storageId,
+            })
+
+            if (!csvUrl) {
+              throw new Error('Failed to get CSV URL from Convex storage')
+            }
+
+            // Create DuckDB table
+            const tableName = file.name
+              .replace(/\.csv$/i, '')
+              .replace(/[^a-zA-Z0-9_]/g, '_')
+              .toLowerCase()
+
+            setUploadProgress(80)
+
+            const result = await createTableFromCSV({
+              data: {
+                csvUrl,
+                tableName,
+              },
+            })
+
+            setUploadProgress(90)
+
+            // Update file record with DuckDB table name
+            await updateDuckDBInfo({
+              fileId,
+              tableName: result.tableName,
+            })
+
+            console.log(
+              `DuckDB table created: ${result.tableName} with ${result.rowCount} rows`,
+            )
+
+            notifications.show({
+              title: 'CSV Processed',
+              message: `Created DuckDB table "${result.tableName}" with ${result.rowCount} rows`,
+              color: 'blue',
+            })
+          } catch (duckdbError) {
+            console.error('DuckDB processing error:', duckdbError)
+            // Don't fail the entire upload if DuckDB processing fails
+            notifications.show({
+              title: 'Warning',
+              message: 'File uploaded but DuckDB table creation failed',
+              color: 'yellow',
+            })
+          }
+        }
+
         setUploadProgress(100)
       }
 
