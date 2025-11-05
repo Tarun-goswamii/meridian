@@ -1,5 +1,5 @@
 import { components } from './_generated/api'
-import { Agent, createTool } from '@convex-dev/agent'
+import { Agent } from '@convex-dev/agent'
 import { createAnthropic } from '@ai-sdk/anthropic'
 import { action } from './_generated/server'
 import { v } from 'convex/values'
@@ -13,19 +13,15 @@ const anth_claude = createAnthropic({
 const table_agent = new Agent(components.agent, {
   name: 'Insite Agent',
   languageModel: anth_claude.languageModel('claude-sonnet-4-0'),
-  instructions: `You are a DuckDB query assistant. You help users write SQL queries for DuckDB.
-
-You will be provided with:
-- The table name
-- Column names and their data types
-- Sample rows from the table (when available)
-
-Use this context to write accurate, efficient SQL queries that reference the correct column names and understand the data structure.
+  instructions: `
+You are a DuckDB query assistant. You help users write SQL queries for DuckDB.
 
 You MUST respond with a JSON object containing exactly two fields:
 1. "command" - The DuckDB SQL query/command (can be any length)
-2. "description" - A brief description of what the query does (50-60 words maximum)`,
-  // tools: {},
+2. "description" - A brief description of what the query does (50-60 words maximum)
+
+REMEMBER: Always write valid DuckDB SQL Queries.
+`,
   maxSteps: 3,
 })
 
@@ -40,13 +36,21 @@ export const askClaude = action({
       }),
     ),
     sampleRows: v.optional(v.array(v.any())),
+    threadId: v.optional(v.string()),
   },
-  handler: async (ctx, { prompt, tableName, columns, sampleRows }) => {
+  handler: async (
+    ctx,
+    { prompt, tableName, columns, sampleRows, threadId },
+  ) => {
     const user_id = await checkAuth(ctx)
 
-    const thread = await table_agent.createThread(ctx, { userId: user_id })
+    let thread
+    if (threadId) {
+      thread = { threadId }
+    } else {
+      thread = await table_agent.createThread(ctx, { userId: user_id })
+    }
 
-    // Build context information
     const columnInfo = columns
       .map((col) => `${col.name} (${col.type})`)
       .join(', ')
@@ -84,7 +88,6 @@ Please write a DuckDB SQL query for the table "${tableName}" based on the user's
     )
 
     try {
-      // Validate the response has required fields
       if (!res.object.command || !res.object.description) {
         throw new Error('Invalid response format from agent')
       }
@@ -92,12 +95,13 @@ Please write a DuckDB SQL query for the table "${tableName}" based on the user's
       return {
         command: res.object.command,
         description: res.object.description,
+        threadId: thread.threadId,
       }
     } catch (error) {
-      // If parsing fails, return an error structure
       return {
         command: '',
         description: 'Error: Agent returned invalid response format',
+        threadId: thread.threadId,
       }
     }
   },

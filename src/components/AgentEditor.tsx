@@ -8,8 +8,14 @@ import {
   Button,
   Alert,
   Box,
+  ScrollArea,
 } from '@mantine/core'
 import { IconTerminal, IconPlayerPlay } from '@tabler/icons-react'
+
+interface Message {
+  role: 'user' | 'assistant'
+  content: string
+}
 
 interface AgentEditorProps {
   input: string
@@ -19,6 +25,7 @@ interface AgentEditorProps {
   onErrorClose: () => void
   isExecuting: boolean
   description?: string
+  messages?: Message[]
 }
 
 export function AgentEditor({
@@ -29,6 +36,7 @@ export function AgentEditor({
   onErrorClose,
   isExecuting,
   description,
+  messages = [],
 }: AgentEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -69,6 +77,32 @@ export function AgentEditor({
           >
             {error}
           </Alert>
+        )}
+        {messages.length > 0 && (
+          <ScrollArea h={120} type="auto">
+            <Stack gap={4}>
+              {messages.map((msg, idx) => (
+                <Box
+                  key={idx}
+                  p={6}
+                  style={{
+                    backgroundColor:
+                      msg.role === 'user'
+                        ? 'var(--mantine-color-gray-0)'
+                        : 'var(--mantine-color-blue-0)',
+                    borderRadius: 4,
+                  }}
+                >
+                  <Text size="xs" fw={500} mb={2}>
+                    {msg.role === 'user' ? 'You' : 'Agent'}
+                  </Text>
+                  <Text size="xs" style={{ whiteSpace: 'pre-wrap' }}>
+                    {msg.content}
+                  </Text>
+                </Box>
+              ))}
+            </Stack>
+          </ScrollArea>
         )}
         {description && (
           <Box

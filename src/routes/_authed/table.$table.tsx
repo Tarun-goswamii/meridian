@@ -27,6 +27,8 @@ import {
 } from '@mantine/core'
 import { QueryEditor } from '~/components/QueryEditor'
 import { AgentEditor } from '~/components/AgentEditor'
+import { Navbar } from '~/components/Navbar'
+
 type TableData = {
   columns: { name: string; type: string }[]
   rows: Record<string, any>[]
@@ -58,13 +60,16 @@ function RouteComponent() {
   const [isExecuting, setIsExecuting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Agent box state
   const [agentInput, setAgentInput] = useState('')
   const [isAgentExecuting, setIsAgentExecuting] = useState(false)
   const [agentError, setAgentError] = useState<string | null>(null)
   const [agentDescription, setAgentDescription] = useState<string | undefined>(
     undefined,
   )
+  const [threadId, setThreadId] = useState<string | undefined>(undefined)
+  const [messages, setMessages] = useState<
+    Array<{ role: 'user' | 'assistant'; content: string }>
+  >([])
 
   const askClaude = useAction(api.table_agent.askClaude)
 
@@ -72,10 +77,7 @@ function RouteComponent() {
     setIsExecuting(true)
     setError(null)
     try {
-      // Execute the query
       await queryDuckDB({ data: query })
-
-      // Invalidate the table query to refresh the data
       await queryClient.invalidateQueries({ queryKey: ['tables', table] })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to execute query')
@@ -84,14 +86,12 @@ function RouteComponent() {
     }
   }
 
-  // Agent action handler
   const handleAgentAction = async () => {
     if (!agentInput.trim()) return
 
     setIsAgentExecuting(true)
     setAgentError(null)
     try {
-      // Get sample rows (first 3 rows as context)
       const sampleRows = data.rows.slice(0, 3)
 
       const response = await askClaude({
@@ -99,15 +99,19 @@ function RouteComponent() {
         tableName: table,
         columns: data.columns,
         sampleRows: sampleRows,
+        threadId: threadId,
       })
 
-      // Set the command in the query editor
       setQuery(response.command)
-
-      // Set the description to display
       setAgentDescription(response.description)
+      setThreadId(response.threadId)
 
-      // Clear the agent input
+      setMessages((prev) => [
+        ...prev,
+        { role: 'user', content: agentInput },
+        { role: 'assistant', content: response.description },
+      ])
+
       setAgentInput('')
     } catch (err) {
       setAgentError(
@@ -149,107 +153,110 @@ function RouteComponent() {
   })
 
   return (
-    <Box p="lg" style={{ position: 'relative', minHeight: '100vh' }}>
-      <Card>
-        <Group justify="space-between" mb="md">
-          <Title order={2}>{table}</Title>
-          <Badge color="blue" size="md" variant="light">
-            {data.rows.length} row{data.rows.length === 1 ? '' : 's'}
-          </Badge>
-        </Group>
-        <Divider mb="md" />
-        <ScrollArea type="auto" offsetScrollbars>
-          <Table
-            striped
-            highlightOnHover
-            withColumnBorders
-            verticalSpacing="sm"
-            horizontalSpacing="md"
-          >
-            <thead>
-              {reactTable.getHeaderGroups().map((headerGroup) => (
-                <tr key={headerGroup.id}>
-                  {headerGroup.headers.map((header) => (
-                    <th key={header.id}>
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(
-                            header.column.columnDef.header,
-                            header.getContext(),
-                          )}
-                    </th>
-                  ))}
-                </tr>
-              ))}
-            </thead>
-            <tbody>
-              {reactTable.getRowModel().rows.length === 0 ? (
-                <tr>
-                  <td colSpan={columns.length}>
-                    <Text c="dimmed" ta="center" py="md">
-                      No data available
-                    </Text>
-                  </td>
-                </tr>
-              ) : (
-                reactTable.getRowModel().rows.map((row) => (
-                  <tr key={row.id}>
-                    {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id}>
-                        {flexRender(
-                          cell.column.columnDef.cell,
-                          cell.getContext(),
-                        )}
-                      </td>
+    <>
+      <Navbar />
+      <Box p="lg" style={{ position: 'relative', minHeight: '100vh' }}>
+        <Card>
+          <Group justify="space-between" mb="md">
+            <Title order={2}>{table}</Title>
+            <Badge color="blue" size="md" variant="light">
+              {data.rows.length} row{data.rows.length === 1 ? '' : 's'}
+            </Badge>
+          </Group>
+          <Divider mb="md" />
+          <ScrollArea type="auto" offsetScrollbars>
+            <Table
+              striped
+              highlightOnHover
+              withColumnBorders
+              verticalSpacing="sm"
+              horizontalSpacing="md"
+            >
+              <thead>
+                {reactTable.getHeaderGroups().map((headerGroup) => (
+                  <tr key={headerGroup.id}>
+                    {headerGroup.headers.map((header) => (
+                      <th key={header.id}>
+                        {header.isPlaceholder
+                          ? null
+                          : flexRender(
+                              header.column.columnDef.header,
+                              header.getContext(),
+                            )}
+                      </th>
                     ))}
                   </tr>
-                ))
-              )}
-            </tbody>
-          </Table>
-        </ScrollArea>
-        <Text mt="md" size="sm" c="gray.6">
-          Showing {data.rows.length} row{data.rows.length === 1 ? '' : 's'}
-        </Text>
-      </Card>
+                ))}
+              </thead>
+              <tbody>
+                {reactTable.getRowModel().rows.length === 0 ? (
+                  <tr>
+                    <td colSpan={columns.length}>
+                      <Text c="dimmed" ta="center" py="md">
+                        No data available
+                      </Text>
+                    </td>
+                  </tr>
+                ) : (
+                  reactTable.getRowModel().rows.map((row) => (
+                    <tr key={row.id}>
+                      {row.getVisibleCells().map((cell) => (
+                        <td key={cell.id}>
+                          {flexRender(
+                            cell.column.columnDef.cell,
+                            cell.getContext(),
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </Table>
+          </ScrollArea>
+          <Text mt="md" size="sm" c="gray.6">
+            Showing {data.rows.length} row{data.rows.length === 1 ? '' : 's'}
+          </Text>
+        </Card>
 
-      {/* Persistent Bottom Bar with Two Editors */}
-      <Box
-        style={{
-          position: 'fixed',
-          left: 0,
-          right: 0,
-          bottom: 0,
-          zIndex: 100,
-          background: 'rgba(255,255,255,0.98)',
-          padding: '16px 24px',
-        }}
-      >
-        <Group
-          align="flex-end"
-          justify="center"
-          gap="xl"
-          style={{ maxWidth: 1200, margin: '0 auto' }}
+        <Box
+          style={{
+            position: 'fixed',
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 100,
+            background: 'rgba(255,255,255,0.98)',
+            padding: '16px 24px',
+          }}
         >
-          <QueryEditor
-            query={query}
-            onQueryChange={setQuery}
-            onExecute={handleExecuteQuery}
-            error={error}
-            onErrorClose={() => setError(null)}
-            isExecuting={isExecuting}
-          />
-          <AgentEditor
-            input={agentInput}
-            onInputChange={setAgentInput}
-            onExecute={handleAgentAction}
-            error={agentError}
-            onErrorClose={() => setAgentError(null)}
-            isExecuting={isAgentExecuting}
-            description={agentDescription}
-          />
-        </Group>
+          <Group
+            align="flex-end"
+            justify="center"
+            gap="xl"
+            style={{ maxWidth: 1200, margin: '0 auto' }}
+          >
+            <QueryEditor
+              query={query}
+              onQueryChange={setQuery}
+              onExecute={handleExecuteQuery}
+              error={error}
+              onErrorClose={() => setError(null)}
+              isExecuting={isExecuting}
+            />
+            <AgentEditor
+              input={agentInput}
+              onInputChange={setAgentInput}
+              onExecute={handleAgentAction}
+              error={agentError}
+              onErrorClose={() => setAgentError(null)}
+              isExecuting={isAgentExecuting}
+              description={agentDescription}
+              messages={messages}
+            />
+          </Group>
+        </Box>
       </Box>
-    </Box>
+    </>
   )
 }
