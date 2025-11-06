@@ -73,8 +73,12 @@ function RouteComponent() {
   )
   const [threadId, setThreadId] = useState<string | undefined>(undefined)
   const [messages, setMessages] = useState<
-    Array<{ role: 'user' | 'assistant'; content: string; command?: string }>
+    Array<{ role: 'user' | 'assistant'; content: string; commands?: string[] }>
   >([])
+  
+  // Command queue state
+  const [commandQueue, setCommandQueue] = useState<string[]>([])
+  const [currentCommandIndex, setCurrentCommandIndex] = useState(0)
 
   // Column visibility state for hiding/showing columns
   const [columnVisibility, setColumnVisibility] = useState<
@@ -94,6 +98,17 @@ function RouteComponent() {
       await queryDuckDB({ data: query })
       await queryClient.invalidateQueries({ queryKey: ['tables', table] })
       setPageIndex(0) // Reset page on query change
+      
+      // Advance to next command in queue if available
+      if (commandQueue.length > 0 && currentCommandIndex < commandQueue.length - 1) {
+        const nextIndex = currentCommandIndex + 1
+        setCurrentCommandIndex(nextIndex)
+        setQuery(commandQueue[nextIndex])
+      } else if (commandQueue.length > 0 && currentCommandIndex >= commandQueue.length - 1) {
+        // All commands executed, clear queue
+        setCommandQueue([])
+        setCurrentCommandIndex(0)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to execute query')
     } finally {
@@ -117,7 +132,13 @@ function RouteComponent() {
         threadId: threadId,
       })
 
-      setQuery(response.command)
+      // Set up command queue
+      if (response.commands && response.commands.length > 0) {
+        setCommandQueue(response.commands)
+        setCurrentCommandIndex(0)
+        setQuery(response.commands[0])
+      }
+
       setAgentDescription(response.description)
       setThreadId(response.threadId)
 
@@ -127,7 +148,7 @@ function RouteComponent() {
         {
           role: 'assistant',
           content: response.description,
-          command: response.command,
+          commands: response.commands || [],
         },
       ])
 
@@ -708,6 +729,8 @@ function RouteComponent() {
             isExecuting={isAgentExecuting}
             description={agentDescription}
             messages={messages}
+            commandQueue={commandQueue}
+            currentCommandIndex={currentCommandIndex}
           />
         </Box>
 
@@ -731,6 +754,8 @@ function RouteComponent() {
               error={error}
               onErrorClose={() => setError(null)}
               isExecuting={isExecuting}
+              commandQueue={commandQueue}
+              currentCommandIndex={currentCommandIndex}
             />
           </Box>
         </Box>

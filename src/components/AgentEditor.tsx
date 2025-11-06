@@ -12,6 +12,7 @@ import {
   Divider,
   Collapse,
   ActionIcon,
+  Badge,
 } from '@mantine/core'
 import {
   IconSparkles,
@@ -25,7 +26,7 @@ import {
 interface Message {
   role: 'user' | 'assistant'
   content: string
-  command?: string
+  commands?: string[]
 }
 
 interface MessagePairProps {
@@ -34,7 +35,7 @@ interface MessagePairProps {
 }
 
 function MessagePair({ user, assistant }: MessagePairProps) {
-  const [commandExpanded, setCommandExpanded] = useState(false)
+  const [commandsExpanded, setCommandsExpanded] = useState(false)
 
   return (
     <Box
@@ -89,16 +90,16 @@ function MessagePair({ user, assistant }: MessagePairProps) {
                 {assistant.content}
               </Text>
 
-              {/* Collapsible Command */}
-              {assistant.command && (
+              {/* Collapsible Commands */}
+              {assistant.commands && assistant.commands.length > 0 && (
                 <Box mt="xs" pl={24}>
                   <Group
                     gap="xs"
                     style={{ cursor: 'pointer' }}
-                    onClick={() => setCommandExpanded(!commandExpanded)}
+                    onClick={() => setCommandsExpanded(!commandsExpanded)}
                   >
                     <ActionIcon size="xs" variant="subtle" color="gray">
-                      {commandExpanded ? (
+                      {commandsExpanded ? (
                         <IconChevronUp size={14} />
                       ) : (
                         <IconChevronDown size={14} />
@@ -110,11 +111,11 @@ function MessagePair({ user, assistant }: MessagePairProps) {
                         style={{ color: 'var(--mantine-color-gray-6)' }}
                       />
                       <Text size="xs" c="dimmed" fw={500}>
-                        SQL Command
+                        SQL Commands ({assistant.commands.length})
                       </Text>
                     </Group>
                   </Group>
-                  <Collapse in={commandExpanded}>
+                  <Collapse in={commandsExpanded}>
                     <Box
                       mt="xs"
                       p="xs"
@@ -122,19 +123,52 @@ function MessagePair({ user, assistant }: MessagePairProps) {
                         backgroundColor: 'rgba(0, 0, 0, 0.03)',
                         borderRadius: 'var(--mantine-radius-sm)',
                         border: '1px solid rgba(0, 0, 0, 0.08)',
+                        maxHeight: '200px',
+                        overflowY: 'auto',
                       }}
                     >
-                      <Text
-                        size="xs"
-                        style={{
-                          whiteSpace: 'pre-wrap',
-                          lineHeight: 1.6,
-                          fontFamily:
-                            'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
-                        }}
-                      >
-                        {assistant.command}
-                      </Text>
+                      <Stack gap="xs">
+                        {assistant.commands.map((cmd, idx) => (
+                          <Box
+                            key={idx}
+                            p="xs"
+                            style={{
+                              backgroundColor: 'rgba(255, 255, 255, 0.5)',
+                              borderRadius: 'var(--mantine-radius-xs)',
+                              border: '1px solid rgba(0, 0, 0, 0.05)',
+                            }}
+                          >
+                            <Group gap="xs" align="flex-start">
+                              <Badge
+                                size="xs"
+                                variant="dot"
+                                color="gray"
+                                style={{
+                                  minWidth: 20,
+                                  textAlign: 'center',
+                                  fontSize: '10px',
+                                }}
+                              >
+                                {idx + 1}
+                              </Badge>
+                              <Text
+                                size="xs"
+                                style={{
+                                  whiteSpace: 'pre-wrap',
+                                  lineHeight: 1.5,
+                                  fontFamily:
+                                    'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
+                                  flex: 1,
+                                  wordBreak: 'break-word',
+                                }}
+                                c="dimmed"
+                              >
+                                {cmd}
+                              </Text>
+                            </Group>
+                          </Box>
+                        ))}
+                      </Stack>
                     </Box>
                   </Collapse>
                 </Box>
@@ -156,6 +190,8 @@ interface AgentEditorProps {
   isExecuting: boolean
   description?: string
   messages?: Message[]
+  commandQueue?: string[]
+  currentCommandIndex?: number
 }
 
 export function AgentEditor({
@@ -167,8 +203,13 @@ export function AgentEditor({
   isExecuting,
   description,
   messages = [],
+  commandQueue = [],
+  currentCommandIndex = 0,
 }: AgentEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const [queueExpanded, setQueueExpanded] = useState(false)
+
+  const remainingCommands = commandQueue.slice(currentCommandIndex + 1)
 
   // Auto-resize textarea
   useEffect(() => {
@@ -252,16 +293,112 @@ export function AgentEditor({
             WebkitBackdropFilter: 'blur(10px)',
           }}
         >
-          <Group gap="xs">
-            <IconSparkles
-              size={20}
-              style={{ color: 'var(--mantine-color-blue-6)' }}
-            />
-            <Text fw={600} size="sm">
-              AI Agent
-            </Text>
+          <Group justify="space-between" align="center">
+            <Group gap="xs">
+              <IconSparkles
+                size={20}
+                style={{ color: 'var(--mantine-color-blue-6)' }}
+              />
+              <Text fw={600} size="sm">
+                AI Agent
+              </Text>
+              {commandQueue.length > 0 && (
+                <Badge
+                  size="xs"
+                  variant="light"
+                  color="blue"
+                  style={{ fontWeight: 500 }}
+                >
+                  {currentCommandIndex + 1} / {commandQueue.length}
+                </Badge>
+              )}
+            </Group>
+            {remainingCommands.length > 0 && (
+              <ActionIcon
+                variant="subtle"
+                size="sm"
+                onClick={() => setQueueExpanded(!queueExpanded)}
+              >
+                {queueExpanded ? (
+                  <IconChevronUp size={16} />
+                ) : (
+                  <IconChevronDown size={16} />
+                )}
+              </ActionIcon>
+            )}
           </Group>
         </Box>
+
+        {/* Command Queue Status */}
+        {remainingCommands.length > 0 && (
+          <Box px="md" pt="xs">
+            <Collapse in={queueExpanded}>
+              <Box
+                p="xs"
+                style={{
+                  backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                  borderRadius: 'var(--mantine-radius-sm)',
+                  border: '1px solid rgba(59, 130, 246, 0.2)',
+                  maxHeight: '120px',
+                  overflowY: 'auto',
+                }}
+              >
+                <Group gap="xs" mb={4}>
+                  <IconCode
+                    size={14}
+                    style={{ color: 'var(--mantine-color-blue-6)' }}
+                  />
+                  <Text size="xs" fw={500} c="blue">
+                    Remaining ({remainingCommands.length})
+                  </Text>
+                </Group>
+                <Stack gap={4}>
+                  {remainingCommands.map((cmd, idx) => {
+                    const actualIndex = currentCommandIndex + 1 + idx
+                    return (
+                      <Box
+                        key={idx}
+                        p="xs"
+                        style={{
+                          backgroundColor: 'rgba(255, 255, 255, 0.6)',
+                          borderRadius: 'var(--mantine-radius-xs)',
+                          border: '1px solid rgba(0, 0, 0, 0.1)',
+                        }}
+                      >
+                        <Group gap="xs" align="flex-start">
+                          <Badge
+                            size="xs"
+                            variant="dot"
+                            color="gray"
+                            style={{
+                              minWidth: 20,
+                              textAlign: 'center',
+                              fontSize: '10px',
+                            }}
+                          >
+                            {actualIndex + 1}
+                          </Badge>
+                          <Text
+                            size="xs"
+                            style={{
+                              fontFamily:
+                                'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
+                              flex: 1,
+                              wordBreak: 'break-word',
+                            }}
+                            c="dimmed"
+                          >
+                            {cmd.length > 60 ? cmd.slice(0, 60) + '…' : cmd}
+                          </Text>
+                        </Group>
+                      </Box>
+                    )
+                  })}
+                </Stack>
+              </Box>
+            </Collapse>
+          </Box>
+        )}
 
         {/* Messages Area */}
         <ScrollArea

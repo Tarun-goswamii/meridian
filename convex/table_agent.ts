@@ -14,13 +14,13 @@ const table_agent = new Agent(components.agent, {
   name: 'Insite Agent',
   languageModel: anth_claude.languageModel('claude-sonnet-4-0'),
   instructions: `
-You are a DuckDB query assistant. You help users write SQL queries for DuckDB.
+You are an assistant that writes DuckDB SQL queries.
 
-You MUST respond with a JSON object containing exactly two fields:
-1. "command" - The DuckDB SQL query/command (can be any length)
-2. "description" - A brief description of what the query does (50-60 words maximum)
+Respond ONLY with a JSON object containing:
+1. "commands": an array of valid DuckDB SQL queries (steps can be split, but use at most 10 per request).
+2. "description": a concise summary of what the queries do (max 60 words).
 
-REMEMBER: Always write valid DuckDB SQL Queries.
+Always output valid DuckDB SQL.
 `,
   maxSteps: 3,
 })
@@ -67,7 +67,7 @@ TABLE CONTEXT:
 USER REQUEST:
 ${prompt}
 
-Please write a DuckDB SQL query for the table "${tableName}" based on the user's request above.`
+Please write a DuckDB SQL queries for the table "${tableName}" based on the user's request above.`
 
     const res = await table_agent.generateObject(
       ctx,
@@ -75,11 +75,16 @@ Please write a DuckDB SQL query for the table "${tableName}" based on the user's
       {
         prompt: contextualPrompt,
         schema: z.object({
-          command: z
-            .string()
-            .describe(
-              'The query / command to execute on the duck db; Should always be valid Duck DB SQL code',
-            ),
+          commands: z
+            .array(
+              z
+                .string()
+                .describe(
+                  'The query / command to execute on the duck db; Should always be valid Duck DB SQL code',
+                ),
+            )
+            .min(1)
+            .max(10),
           description: z
             .string()
             .describe('A description of what the query does; Max 50 words'),
@@ -88,18 +93,18 @@ Please write a DuckDB SQL query for the table "${tableName}" based on the user's
     )
 
     try {
-      if (!res.object.command || !res.object.description) {
+      if (!res.object.commands || !res.object.description) {
         throw new Error('Invalid response format from agent')
       }
 
       return {
-        command: res.object.command,
+        commands: res.object.commands,
         description: res.object.description,
         threadId: thread.threadId,
       }
     } catch (error) {
       return {
-        command: '',
+        commands: [],
         description: 'Error: Agent returned invalid response format',
         threadId: thread.threadId,
       }
