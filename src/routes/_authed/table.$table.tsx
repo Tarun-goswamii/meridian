@@ -13,7 +13,7 @@ import {
   flexRender,
   type ColumnDef,
 } from '@tanstack/react-table'
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState } from 'react'
 import {
   Title,
   Table,
@@ -35,7 +35,8 @@ import { AgentEditor } from '~/components/AgentEditor'
 import { InsightsPanel, type Insight } from '~/components/InsightsPanel'
 import { IconColumns, IconBrain, IconSparkles } from '@tabler/icons-react'
 import { useDidUpdate } from '@mantine/hooks'
-import { askGemini } from '../../../convex/table_agent'
+import usePresence from '@convex-dev/presence/react'
+import FacePile from '@convex-dev/presence/facepile'
 
 type TableData = {
   columns: { name: string; type: string }[]
@@ -99,6 +100,9 @@ function RouteComponent() {
 
   // Panel toggle state
   const [activePanel, setActivePanel] = useState<'agent' | 'insights'>('agent')
+
+  const [name] = useState(() => 'User ' + Math.floor(Math.random() * 10000))
+  const presenceState = usePresence(api.presence, 'my-chat-room', name)
 
   const askGemini = useAction(api.table_agent.askGemini)
   const generateInsights = useAction(api.insights.generateInsights)
@@ -804,7 +808,9 @@ function RouteComponent() {
           >
             <SegmentedControl
               value={activePanel}
-              onChange={(value) => setActivePanel(value as 'agent' | 'insights')}
+              onChange={(value) =>
+                setActivePanel(value as 'agent' | 'insights')
+              }
               data={[
                 {
                   value: 'agent',
@@ -859,17 +865,17 @@ function RouteComponent() {
                 commandQueue={commandQueue}
                 currentCommandIndex={currentCommandIndex}
               />
-             ) : (
-               <InsightsPanel
-                 insights={insights}
-                 isLoading={isGeneratingInsights}
-                 onGenerate={handleGenerateInsights}
-                 onRefresh={handleRefreshInsights}
-                 onDismiss={handleDismissInsights}
-                 error={insightsError}
-                 hasData={data && data.rows.length > 0}
-               />
-             )}
+            ) : (
+              <InsightsPanel
+                insights={insights}
+                isLoading={isGeneratingInsights}
+                onGenerate={handleGenerateInsights}
+                onRefresh={handleRefreshInsights}
+                onDismiss={handleDismissInsights}
+                error={insightsError}
+                hasData={data && data.rows.length > 0}
+              />
+            )}
           </Box>
         </Box>
 
@@ -885,6 +891,8 @@ function RouteComponent() {
             backgroundColor: 'transparent',
           }}
         >
+          <FacePile presenceState={presenceState ?? []} />
+
           <Box style={{ maxWidth: 1400, margin: '0 auto' }}>
             <QueryEditor
               query={query}

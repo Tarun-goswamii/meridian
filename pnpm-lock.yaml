@@ -23,6 +23,9 @@ importers:
       '@convex-dev/auth':
         specifier: ^0.0.90
         version: 0.0.90(@auth/core@0.37.0)(convex@1.28.2(react@19.2.0))(react@19.2.0)
+      '@convex-dev/presence':
+        specifier: ^0.2.1
+        version: 0.2.1(convex@1.28.2(react@19.2.0))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       '@convex-dev/react-query':
         specifier: ^0.0.0-alpha.11
         version: 0.0.0-alpha.11(@standard-schema/spec@1.0.0)(@tanstack/react-query@5.90.6(react@19.2.0))(convex@1.28.2(react@19.2.0))(react@19.2.0)(typescript@5.9.3)(zod@4.1.12)
@@ -386,6 +389,20 @@ packages:
 
   '@convex-dev/eslint-plugin@1.0.0':
     resolution: {integrity: sha512-ublJRBKcLCioNaf1ylkCHD2KzAqWE2RIQ6DA/UgXAXQW5qg4vZSWY8wy+EK11yJkSSxcGfFXDWaE1+cHaWJvNA==}
+
+  '@convex-dev/presence@0.2.1':
+    resolution: {integrity: sha512-XBcEzb1qxV4yq3UNe+UpZbTb1ecgg14vYZWDZMA2XPh2D/x2yCxTfWyQ/vdMeX2HYiGzj2be5aRu8CK3cogQnA==}
+    peerDependencies:
+      convex: '>=1.24.8 <1.35.0'
+      expo-crypto: '>=14.1.0'
+      react: ~18.3.1 || ^19.0.0
+      react-dom: ~18.3.1 || ^19.0.0
+      react-native: '>=0.79.0'
+    peerDependenciesMeta:
+      expo-crypto:
+        optional: true
+      react-native:
+        optional: true
 
   '@convex-dev/react-query@0.0.0-alpha.11':
     resolution: {integrity: sha512-Fy/p3JOvUUNrbBBQD0AEXcSU40PBu567gm3XRgExHkiKlv07kBOjnuXA0TvodKkryyuHLbuIxYP8XIv03i6DEw==}
@@ -3656,6 +3673,12 @@ snapshots:
       - eslint
       - supports-color
       - typescript
+
+  '@convex-dev/presence@0.2.1(convex@1.28.2(react@19.2.0))(react-dom@19.2.0(react@19.2.0))(react@19.2.0)':
+    dependencies:
+      convex: 1.28.2(react@19.2.0)
+      react: 19.2.0
+      react-dom: 19.2.0(react@19.2.0)
 
   '@convex-dev/react-query@0.0.0-alpha.11(@standard-schema/spec@1.0.0)(@tanstack/react-query@5.90.6(react@19.2.0))(convex@1.28.2(react@19.2.0))(react@19.2.0)(typescript@5.9.3)(zod@4.1.12)':
     dependencies:

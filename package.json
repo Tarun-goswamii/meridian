@@ -19,6 +19,7 @@
     "@auth/core": "0.37.0",
     "@convex-dev/agent": "^0.2.12",
     "@convex-dev/auth": "^0.0.90",
+    "@convex-dev/presence": "^0.2.1",
     "@convex-dev/react-query": "^0.0.0-alpha.11",
     "@duckdb/node-api": "1.4.1-r.4",
     "@mantine/code-highlight": "^8.3.6",
