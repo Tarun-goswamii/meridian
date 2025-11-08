@@ -131,23 +131,7 @@ function RouteComponent() {
         setCommandQueue([])
         setCurrentCommandIndex(0)
       }
-
-      // Generate insights after query execution
-      // Wait a bit for query to complete and data to be available
-      setTimeout(async () => {
-        try {
-          await queryClient.refetchQueries({ queryKey: ['tables', table] })
-          const updatedData = queryClient.getQueryData<TableData>([
-            'tables',
-            table,
-          ])
-          if (updatedData && updatedData.rows.length > 0) {
-            await generateInsightsForData(updatedData)
-          }
-        } catch (err) {
-          console.error('Error generating insights:', err)
-        }
-      }, 800)
+      // Note: Insights are now generated manually by user clicking a button
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to execute query')
     } finally {
@@ -155,7 +139,10 @@ function RouteComponent() {
     }
   }
 
-  const generateInsightsForData = async (dataToAnalyze: TableData) => {
+  const generateInsightsForData = async (
+    dataToAnalyze: TableData,
+    forceRefresh: boolean = false,
+  ) => {
     setIsGeneratingInsights(true)
     setInsightsError(null)
     try {
@@ -164,6 +151,7 @@ function RouteComponent() {
         rows: dataToAnalyze.rows,
         tableName: table,
         query: query,
+        forceRefresh: forceRefresh,
       })
 
       if (result.error) {
@@ -180,9 +168,15 @@ function RouteComponent() {
     }
   }
 
+  const handleGenerateInsights = async () => {
+    if (data && data.rows.length > 0) {
+      await generateInsightsForData(data, false)
+    }
+  }
+
   const handleRefreshInsights = async () => {
     if (data && data.rows.length > 0) {
-      await generateInsightsForData(data)
+      await generateInsightsForData(data, true) // Force refresh
     }
   }
 
@@ -190,26 +184,6 @@ function RouteComponent() {
     setInsights([])
     setInsightsError(null)
   }
-
-  // Generate insights on initial load (only once per data change)
-  useEffect(() => {
-    const shouldGenerate =
-      data &&
-      data.rows.length > 0 &&
-      insights.length === 0 &&
-      !isGeneratingInsights &&
-      !insightsError
-
-    if (shouldGenerate) {
-      // Small delay to ensure data is fully loaded
-      const timer = setTimeout(() => {
-        generateInsightsForData(data)
-      }, 1000)
-
-      return () => clearTimeout(timer)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data?.columns.length, data?.rows.length]) // Only regenerate when columns or row count changes
 
   const handleAgentAction = async () => {
     if (!agentInput.trim()) return
@@ -885,15 +859,17 @@ function RouteComponent() {
                 commandQueue={commandQueue}
                 currentCommandIndex={currentCommandIndex}
               />
-            ) : (
-              <InsightsPanel
-                insights={insights}
-                isLoading={isGeneratingInsights}
-                onRefresh={handleRefreshInsights}
-                onDismiss={handleDismissInsights}
-                error={insightsError}
-              />
-            )}
+             ) : (
+               <InsightsPanel
+                 insights={insights}
+                 isLoading={isGeneratingInsights}
+                 onGenerate={handleGenerateInsights}
+                 onRefresh={handleRefreshInsights}
+                 onDismiss={handleDismissInsights}
+                 error={insightsError}
+                 hasData={data && data.rows.length > 0}
+               />
+             )}
           </Box>
         </Box>
 

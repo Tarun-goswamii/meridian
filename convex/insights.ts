@@ -1,9 +1,111 @@
-import { action } from './_generated/server'
+import { action, query, mutation } from './_generated/server'
 import { v } from 'convex/values'
 import { checkAuth } from './authFns'
 import { generateObject } from 'ai'
 import { z } from 'zod'
 import { model } from './table_agent'
+import { getAuthUserId } from '@convex-dev/auth/server'
+import { api } from './_generated/api'
+
+// Simple hash function for creating cache keys
+function simpleHash(str: string): string {
+  let hash = 0
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i)
+    hash = (hash << 5) - hash + char
+    hash = hash & hash // Convert to 32bit integer
+  }
+  return Math.abs(hash).toString(36)
+}
+
+function generateCacheKey(
+  tableName: string,
+  query: string,
+  columns: Array<{ name: string; type: string }>,
+  rowCount: number,
+): string {
+  const dataSignature = `${tableName}|${query}|${columns.map((c) => `${c.name}:${c.type}`).join(',')}|${rowCount}`
+  return simpleHash(dataSignature)
+}
+
+// Query to get cached insights
+export const getCachedInsights = query({
+  args: {
+    cacheKey: v.string(),
+  },
+  handler: async (ctx, { cacheKey }) => {
+    const userId = await getAuthUserId(ctx)
+    if (!userId) return null
+
+    const cached = await ctx.db
+      .query('insightsCache')
+      .withIndex('by_cacheKey', (q) => q.eq('cacheKey', cacheKey))
+      .filter((q) => q.eq(q.field('userId'), userId))
+      .first()
+
+    if (!cached) return null
+
+    // Return cached insights if they exist
+    return {
+      insights: cached.insights,
+      statisticalFindings: cached.statisticalFindings,
+      cached: true,
+      createdAt: cached.createdAt,
+    }
+  },
+})
+
+// Mutation to store insights in cache
+export const cacheInsights = mutation({
+  args: {
+    cacheKey: v.string(),
+    tableName: v.string(),
+    query: v.string(),
+    dataHash: v.string(),
+    insights: v.array(
+      v.object({
+        title: v.string(),
+        description: v.string(),
+        type: v.string(),
+        severity: v.string(),
+      }),
+    ),
+    statisticalFindings: v.any(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx)
+    if (!userId) throw new Error('Not authenticated')
+
+    // Check if cache entry already exists
+    const existing = await ctx.db
+      .query('insightsCache')
+      .withIndex('by_cacheKey', (q) => q.eq('cacheKey', args.cacheKey))
+      .filter((q) => q.eq(q.field('userId'), userId))
+      .first()
+
+    if (existing) {
+      // Update existing cache
+      await ctx.db.patch(existing._id, {
+        insights: args.insights,
+        statisticalFindings: args.statisticalFindings,
+        createdAt: Date.now(),
+      })
+      return existing._id
+    } else {
+      // Create new cache entry
+      return await ctx.db.insert('insightsCache', {
+        cacheKey: args.cacheKey,
+        tableName: args.tableName,
+        query: args.query,
+        dataHash: args.dataHash,
+        insights: args.insights,
+        statisticalFindings: args.statisticalFindings,
+        createdAt: Date.now(),
+        userId,
+      })
+    }
+  },
+})
 
 // Statistical analysis functions
 function isNumeric(value: any): boolean {
@@ -186,15 +288,37 @@ export const generateInsights = action({
     rows: v.array(v.any()),
     tableName: v.optional(v.string()),
     query: v.optional(v.string()),
+    forceRefresh: v.optional(v.boolean()),
   },
-  handler: async (ctx, { columns, rows, tableName, query }) => {
-    await checkAuth(ctx)
+  handler: async (ctx, { columns, rows, tableName, query, forceRefresh }) => {
+    const userId = await checkAuth(ctx)
 
     if (!rows || rows.length === 0) {
       return {
         insights: [],
         statisticalFindings: [],
         error: 'No data to analyze',
+        cached: false,
+      }
+    }
+
+    const table = tableName || 'unknown'
+    const queryStr = query || 'SELECT * FROM table'
+    const dataHash = simpleHash(
+      JSON.stringify({ columns, rowCount: rows.length }),
+    )
+    const cacheKey = generateCacheKey(table, queryStr, columns, rows.length)
+
+    // Check cache first (unless force refresh)
+    if (!forceRefresh) {
+      const cached: any = await ctx.runQuery(api.insights.getCachedInsights, {
+        cacheKey,
+      })
+      if (cached) {
+        return {
+          ...cached,
+          error: null,
+        }
       }
     }
 
@@ -308,27 +432,61 @@ Keep insights concise (1-2 sentences each) and actionable.
         prompt: context,
       })
 
-      return {
+      const insightsResult = {
         insights: result.object.insights,
-        // insights: {},
         statisticalFindings: analyses,
         error: null,
+        cached: false,
       }
+
+      // Cache the insights
+      try {
+        await ctx.runMutation(api.insights.cacheInsights, {
+          cacheKey,
+          tableName: table,
+          query: queryStr,
+          dataHash,
+          insights: result.object.insights,
+          statisticalFindings: analyses,
+        })
+      } catch (cacheError) {
+        console.error('Error caching insights:', cacheError)
+        // Continue even if caching fails
+      }
+
+      return insightsResult
     } catch (error) {
       console.error('Error generating AI insights:', error)
       // Fallback to basic insights
+      const fallbackInsights = findings.slice(0, 5).map((finding, idx) => ({
+        title: `Finding ${idx + 1}`,
+        description: finding,
+        type: 'pattern' as const,
+        severity: 'medium' as const,
+      }))
+
+      // Try to cache fallback insights
+      try {
+        await ctx.runMutation(api.insights.cacheInsights, {
+          cacheKey,
+          tableName: table,
+          query: queryStr,
+          dataHash,
+          insights: fallbackInsights,
+          statisticalFindings: analyses,
+        })
+      } catch (cacheError) {
+        console.error('Error caching fallback insights:', cacheError)
+      }
+
       return {
-        insights: findings.slice(0, 5).map((finding, idx) => ({
-          title: `Finding ${idx + 1}`,
-          description: finding,
-          type: 'pattern' as const,
-          severity: 'medium' as const,
-        })),
+        insights: fallbackInsights,
         statisticalFindings: analyses,
         error:
           error instanceof Error
             ? error.message
             : 'Failed to generate AI insights',
+        cached: false,
       }
     }
   },

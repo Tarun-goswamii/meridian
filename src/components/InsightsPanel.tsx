@@ -8,6 +8,7 @@ import {
   ActionIcon,
   Collapse,
   Tooltip,
+  Button,
 } from '@mantine/core'
 import {
   IconBrain,
@@ -18,6 +19,7 @@ import {
   IconChevronUp,
   IconRefresh,
   IconX,
+  IconSparkles,
 } from '@tabler/icons-react'
 import { useState } from 'react'
 
@@ -31,9 +33,11 @@ export interface Insight {
 interface InsightsPanelProps {
   insights: Insight[]
   isLoading?: boolean
+  onGenerate?: () => void
   onRefresh?: () => void
   onDismiss?: () => void
   error?: string | null
+  hasData?: boolean
 }
 
 function getInsightIcon(type: Insight['type']) {
@@ -137,7 +141,13 @@ function InsightCard({ insight }: { insight: Insight }) {
                 >
                   {insight.title}
                 </Text>
-                <div>
+                <Box
+                  display="flex"
+                  style={{
+                    flexDirection: 'column',
+                    gap: 4,
+                  }}
+                >
                   <Badge
                     size="xs"
                     variant="dot"
@@ -160,7 +170,7 @@ function InsightCard({ insight }: { insight: Insight }) {
                   >
                     {insight.type}
                   </Badge>
-                </div>
+                </Box>
               </Box>
               <Box
                 style={{
@@ -219,9 +229,11 @@ function InsightCard({ insight }: { insight: Insight }) {
 export function InsightsPanel({
   insights,
   isLoading = false,
+  onGenerate,
   onRefresh,
   onDismiss,
   error,
+  hasData = true,
 }: InsightsPanelProps) {
   const [expanded, setExpanded] = useState(true)
 
@@ -289,8 +301,8 @@ export function InsightsPanel({
               )}
             </Group>
             <Group gap="xs" wrap="nowrap">
-              {onRefresh && (
-                <Tooltip label="Refresh insights">
+              {onRefresh && insights.length > 0 && (
+                <Tooltip label="Regenerate insights (bypass cache)">
                   <ActionIcon
                     variant="subtle"
                     size="sm"
@@ -387,12 +399,28 @@ export function InsightsPanel({
                       display: 'block',
                     }}
                   />
-                  <Text size="sm" c="dimmed">
-                    No insights available
+                  <Text size="sm" c="dimmed" mb="md">
+                    {hasData
+                      ? 'No insights generated yet'
+                      : 'Run a query to generate insights'}
                   </Text>
-                  <Text size="xs" c="dimmed" mt="xs">
-                    Run a query to generate insights
-                  </Text>
+                  {hasData && onGenerate && (
+                    <Button
+                      leftSection={<IconSparkles size={16} />}
+                      onClick={onGenerate}
+                      loading={isLoading}
+                      size="sm"
+                      variant="light"
+                      color="violet"
+                    >
+                      Generate Insights
+                    </Button>
+                  )}
+                  {!hasData && (
+                    <Text size="xs" c="dimmed">
+                      Run a query first, then generate insights
+                    </Text>
+                  )}
                 </Box>
               ) : (
                 <Stack gap="sm" style={{ overflow: 'scroll !important' }}>
