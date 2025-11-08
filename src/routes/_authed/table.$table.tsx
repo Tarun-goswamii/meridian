@@ -13,7 +13,7 @@ import {
   flexRender,
   type ColumnDef,
 } from '@tanstack/react-table'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import {
   Title,
   Table,
@@ -28,11 +28,14 @@ import {
   Menu,
   Checkbox,
   Button,
+  SegmentedControl,
 } from '@mantine/core'
 import { QueryEditor } from '~/components/QueryEditor'
 import { AgentEditor } from '~/components/AgentEditor'
-import { IconColumns } from '@tabler/icons-react'
+import { InsightsPanel, type Insight } from '~/components/InsightsPanel'
+import { IconColumns, IconBrain, IconSparkles } from '@tabler/icons-react'
 import { useDidUpdate } from '@mantine/hooks'
+import { askGemini } from '../../../convex/table_agent'
 
 type TableData = {
   columns: { name: string; type: string }[]
@@ -75,7 +78,7 @@ function RouteComponent() {
   const [messages, setMessages] = useState<
     Array<{ role: 'user' | 'assistant'; content: string; commands?: string[] }>
   >([])
-  
+
   // Command queue state
   const [commandQueue, setCommandQueue] = useState<string[]>([])
   const [currentCommandIndex, setCurrentCommandIndex] = useState(0)
@@ -89,32 +92,124 @@ function RouteComponent() {
   const [pageSize, setPageSize] = useState(50)
   const [pageIndex, setPageIndex] = useState(0)
 
-  const askClaude = useAction(api.table_agent.askClaude)
+  // Insights state
+  const [insights, setInsights] = useState<Insight[]>([])
+  const [isGeneratingInsights, setIsGeneratingInsights] = useState(false)
+  const [insightsError, setInsightsError] = useState<string | null>(null)
+
+  // Panel toggle state
+  const [activePanel, setActivePanel] = useState<'agent' | 'insights'>('agent')
+
+  const askGemini = useAction(api.table_agent.askGemini)
+  const generateInsights = useAction(api.insights.generateInsights)
 
   const handleExecuteQuery = async () => {
     setIsExecuting(true)
     setError(null)
+    // Clear old insights when starting a new query
+    setInsights([])
+    setInsightsError(null)
+
     try {
       await queryDuckDB({ data: query })
       await queryClient.invalidateQueries({ queryKey: ['tables', table] })
       setPageIndex(0) // Reset page on query change
-      
+
       // Advance to next command in queue if available
-      if (commandQueue.length > 0 && currentCommandIndex < commandQueue.length - 1) {
+      if (
+        commandQueue.length > 0 &&
+        currentCommandIndex < commandQueue.length - 1
+      ) {
         const nextIndex = currentCommandIndex + 1
         setCurrentCommandIndex(nextIndex)
         setQuery(commandQueue[nextIndex])
-      } else if (commandQueue.length > 0 && currentCommandIndex >= commandQueue.length - 1) {
+      } else if (
+        commandQueue.length > 0 &&
+        currentCommandIndex >= commandQueue.length - 1
+      ) {
         // All commands executed, clear queue
         setCommandQueue([])
         setCurrentCommandIndex(0)
       }
+
+      // Generate insights after query execution
+      // Wait a bit for query to complete and data to be available
+      setTimeout(async () => {
+        try {
+          await queryClient.refetchQueries({ queryKey: ['tables', table] })
+          const updatedData = queryClient.getQueryData<TableData>([
+            'tables',
+            table,
+          ])
+          if (updatedData && updatedData.rows.length > 0) {
+            await generateInsightsForData(updatedData)
+          }
+        } catch (err) {
+          console.error('Error generating insights:', err)
+        }
+      }, 800)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to execute query')
     } finally {
       setIsExecuting(false)
     }
   }
+
+  const generateInsightsForData = async (dataToAnalyze: TableData) => {
+    setIsGeneratingInsights(true)
+    setInsightsError(null)
+    try {
+      const result = await generateInsights({
+        columns: dataToAnalyze.columns,
+        rows: dataToAnalyze.rows,
+        tableName: table,
+        query: query,
+      })
+
+      if (result.error) {
+        setInsightsError(result.error)
+      } else {
+        setInsights(result.insights || [])
+      }
+    } catch (err) {
+      setInsightsError(
+        err instanceof Error ? err.message : 'Failed to generate insights',
+      )
+    } finally {
+      setIsGeneratingInsights(false)
+    }
+  }
+
+  const handleRefreshInsights = async () => {
+    if (data && data.rows.length > 0) {
+      await generateInsightsForData(data)
+    }
+  }
+
+  const handleDismissInsights = () => {
+    setInsights([])
+    setInsightsError(null)
+  }
+
+  // Generate insights on initial load (only once per data change)
+  useEffect(() => {
+    const shouldGenerate =
+      data &&
+      data.rows.length > 0 &&
+      insights.length === 0 &&
+      !isGeneratingInsights &&
+      !insightsError
+
+    if (shouldGenerate) {
+      // Small delay to ensure data is fully loaded
+      const timer = setTimeout(() => {
+        generateInsightsForData(data)
+      }, 1000)
+
+      return () => clearTimeout(timer)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.columns.length, data?.rows.length]) // Only regenerate when columns or row count changes
 
   const handleAgentAction = async () => {
     if (!agentInput.trim()) return
@@ -124,7 +219,7 @@ function RouteComponent() {
     try {
       const sampleRows = data.rows.slice(0, 3)
 
-      const response = await askClaude({
+      const response = await askGemini({
         prompt: agentInput,
         tableName: table,
         columns: data.columns,
@@ -704,7 +799,7 @@ function RouteComponent() {
           </Box>
         </Box>
 
-        {/* Agent Sidebar - Fixed on Right */}
+        {/* Right Sidebar - Toggle between Agent and Insights */}
         <Box
           style={{
             position: 'fixed',
@@ -718,20 +813,88 @@ function RouteComponent() {
             display: 'flex',
             flexDirection: 'column',
             height: 'calc(100vh - 60px)',
+            gap: '12px',
           }}
         >
-          <AgentEditor
-            input={agentInput}
-            onInputChange={setAgentInput}
-            onExecute={handleAgentAction}
-            error={agentError}
-            onErrorClose={() => setAgentError(null)}
-            isExecuting={isAgentExecuting}
-            description={agentDescription}
-            messages={messages}
-            commandQueue={commandQueue}
-            currentCommandIndex={currentCommandIndex}
-          />
+          {/* Toggle Header */}
+          <Box
+            p="xs"
+            style={{
+              backgroundColor: 'rgba(255, 255, 255, 0.9)',
+              backdropFilter: 'blur(10px)',
+              WebkitBackdropFilter: 'blur(10px)',
+              borderRadius: 'var(--mantine-radius-md)',
+              border: '1px solid rgba(0, 0, 0, 0.1)',
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
+            }}
+          >
+            <SegmentedControl
+              value={activePanel}
+              onChange={(value) => setActivePanel(value as 'agent' | 'insights')}
+              data={[
+                {
+                  value: 'agent',
+                  label: (
+                    <Group gap={6} style={{ justifyContent: 'center' }}>
+                      <IconSparkles size={16} />
+                      <Text size="xs" fw={500}>
+                        Agent
+                      </Text>
+                    </Group>
+                  ),
+                },
+                {
+                  value: 'insights',
+                  label: (
+                    <Group gap={6} style={{ justifyContent: 'center' }}>
+                      <IconBrain size={16} />
+                      <Text size="xs" fw={500}>
+                        Insights
+                      </Text>
+                      {insights.length > 0 && (
+                        <Badge
+                          size="xs"
+                          variant="filled"
+                          color="violet"
+                          style={{ minWidth: 18, height: 18, padding: '0 4px' }}
+                        >
+                          {insights.length}
+                        </Badge>
+                      )}
+                    </Group>
+                  ),
+                },
+              ]}
+              fullWidth
+              size="sm"
+            />
+          </Box>
+
+          {/* Active Panel Content */}
+          <Box style={{ flex: 1, minHeight: 0 }}>
+            {activePanel === 'agent' ? (
+              <AgentEditor
+                input={agentInput}
+                onInputChange={setAgentInput}
+                onExecute={handleAgentAction}
+                error={agentError}
+                onErrorClose={() => setAgentError(null)}
+                isExecuting={isAgentExecuting}
+                description={agentDescription}
+                messages={messages}
+                commandQueue={commandQueue}
+                currentCommandIndex={currentCommandIndex}
+              />
+            ) : (
+              <InsightsPanel
+                insights={insights}
+                isLoading={isGeneratingInsights}
+                onRefresh={handleRefreshInsights}
+                onDismiss={handleDismissInsights}
+                error={insightsError}
+              />
+            )}
+          </Box>
         </Box>
 
         {/* Query Editor - Fixed at Bottom */}

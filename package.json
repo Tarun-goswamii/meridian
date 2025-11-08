@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.41",
+    "@ai-sdk/google": "^2.0.29",
     "@auth/core": "0.37.0",
     "@convex-dev/agent": "^0.2.12",
     "@convex-dev/auth": "^0.0.90",
@@ -45,6 +46,7 @@
     "dayjs": "^1.11.19",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
+    "simple-statistics": "^7.8.8",
     "zod": "^4.1.12"
   },
   "devDependencies": {

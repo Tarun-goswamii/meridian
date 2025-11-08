@@ -12,6 +12,7 @@ import type * as auth from "../auth.js";
 import type * as authFns from "../authFns.js";
 import type * as csv from "../csv.js";
 import type * as http from "../http.js";
+import type * as insights from "../insights.js";
 import type * as table_agent from "../table_agent.js";
 
 import type {
@@ -33,6 +34,7 @@ declare const fullApi: ApiFromModules<{
   authFns: typeof authFns;
   csv: typeof csv;
   http: typeof http;
+  insights: typeof insights;
   table_agent: typeof table_agent;
 }>;
 declare const fullApiWithMounts: typeof fullApi;

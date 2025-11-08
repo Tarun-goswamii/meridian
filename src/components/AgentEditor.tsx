@@ -265,9 +265,9 @@ export function AgentEditor({
     <Box
       p={0}
       style={{
-        width: 380,
+        width: '100%',
         minWidth: 320,
-        maxWidth: '30vw',
+        maxWidth: '100%',
         display: 'flex',
         flexDirection: 'column',
         height: '100%',

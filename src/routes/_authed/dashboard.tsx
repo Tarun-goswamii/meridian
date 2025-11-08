@@ -144,13 +144,24 @@ function Home() {
                         {new Date(file.uploadedAt).toLocaleString()}
                       </Text>
                     </div>
-                    <ActionIcon
-                      color="red"
-                      variant="subtle"
-                      onClick={() => void deleteFile({ fileId: file._id })}
-                    >
-                      <IconTrash size={18} />
-                    </ActionIcon>
+                    <Group gap="xs">
+                      <Button
+                        size="xs"
+                        variant="light"
+                        component="a"
+                        href={`/table/${encodeURIComponent(file.duckdbTableName!)}`}
+                        target="_blank"
+                      >
+                        View Table
+                      </Button>
+                      <ActionIcon
+                        color="red"
+                        variant="subtle"
+                        onClick={() => void deleteFile({ fileId: file._id })}
+                      >
+                        <IconTrash size={18} />
+                      </ActionIcon>
+                    </Group>
                   </Group>
                 </List.Item>
               ))}

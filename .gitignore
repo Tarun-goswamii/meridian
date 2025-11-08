@@ -30,4 +30,4 @@ app.config.timestamp_*.js
 .vscode
 .idea
 *.db
-*.db.wal
+*.db.*

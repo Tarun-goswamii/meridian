@@ -1,18 +1,20 @@
 import { components } from './_generated/api'
 import { Agent } from '@convex-dev/agent'
-import { createAnthropic } from '@ai-sdk/anthropic'
+import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { action } from './_generated/server'
 import { v } from 'convex/values'
 import { checkAuth } from './authFns'
 import { z } from 'zod'
 
-const anth_claude = createAnthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
+const google_gemini = createGoogleGenerativeAI({
+  apiKey: process.env.GEMINI_API_KEY,
 })
+
+export const model = google_gemini.languageModel('gemini-2.5-flash')
 
 const table_agent = new Agent(components.agent, {
   name: 'Insite Agent',
-  languageModel: anth_claude.languageModel('claude-sonnet-4-0'),
+  languageModel: model,
   instructions: `
 You are an assistant that writes DuckDB SQL queries.
 
@@ -25,7 +27,7 @@ Always output valid DuckDB SQL.
   maxSteps: 3,
 })
 
-export const askClaude = action({
+export const askGemini = action({
   args: {
     prompt: v.string(),
     tableName: v.string(),
