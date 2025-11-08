@@ -136,3 +136,53 @@ export const createTableFromCSV = createServerFn()
       }
     }
   })
+
+// Analytics query function for insights generation
+// Executes DuckDB queries and returns raw results (no JSON stringification)
+export const queryDuckDBAnalytics = createServerFn()
+  .inputValidator((query: string) => query)
+  .handler(async ({ data: query }) => {
+    const db = await getDuckDB()
+    const connection = await db.connect()
+    const result = await connection.run(query)
+    const rawRows = await result.getRows()
+
+    // Get column names and types
+    const columnCount = result.columnCount
+    const columns = Array.from({ length: columnCount }, (_, i) => ({
+      name: result.columnName(i),
+      type: String(result.columnType(i)),
+    }))
+
+    // Convert rows to objects with proper serialization
+    const rows = rawRows.map((row) => {
+      const rowObj: Record<string, any> = {}
+      columns.forEach((col, i) => {
+        const value = row[i]
+
+        // Handle BigInt serialization
+        if (typeof value === 'bigint') {
+          rowObj[col.name] = Number(value)
+        }
+        // Handle DuckDB date values
+        else if (value && typeof value === 'object' && 'days' in value) {
+          // Convert days since epoch to ISO date string
+          const date = new Date(1970, 0, 1)
+          date.setDate(date.getDate() + (value as any).days)
+          rowObj[col.name] = date.toISOString().split('T')[0]
+        }
+        // Handle null/undefined
+        else if (value === null || value === undefined) {
+          rowObj[col.name] = null
+        }
+        // Handle other types
+        else {
+          rowObj[col.name] = value
+        }
+      })
+      return rowObj
+    })
+
+    connection.closeSync()
+    return { columns, rows }
+  })

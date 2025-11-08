@@ -21,10 +21,10 @@ function simpleHash(str: string): string {
 function generateCacheKey(
   tableName: string,
   query: string,
-  columns: Array<{ name: string; type: string }>,
+  columnCount: number,
   rowCount: number,
 ): string {
-  const dataSignature = `${tableName}|${query}|${columns.map((c) => `${c.name}:${c.type}`).join(',')}|${rowCount}`
+  const dataSignature = `${tableName}|${query}|${columnCount}|${rowCount}`
   return simpleHash(dataSignature)
 }
 
@@ -107,207 +107,100 @@ export const cacheInsights = mutation({
   },
 })
 
-// Statistical analysis functions
-function isNumeric(value: any): boolean {
-  if (value === null || value === undefined) return false
-  const num = Number(value)
-  return !isNaN(num) && isFinite(num)
-}
-
-function extractNumericValues(
-  rows: Record<string, any>[],
-  columnName: string,
-): number[] {
-  return rows
-    .map((row) => row[columnName])
-    .filter((val) => isNumeric(val))
-    .map((val) => Number(val))
-}
-
-function calculateStats(values: number[]) {
-  if (values.length === 0) return null
-
-  const sorted = [...values].sort((a, b) => a - b)
-  const mean = values.reduce((a, b) => a + b, 0) / values.length
-  const variance =
-    values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) /
-    values.length
-  const stdDev = Math.sqrt(variance)
-  const median =
-    sorted.length % 2 === 0
-      ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
-      : sorted[Math.floor(sorted.length / 2)]
-  const min = sorted[0]
-  const max = sorted[sorted.length - 1]
-  const q1 = sorted[Math.floor(sorted.length * 0.25)]
-  const q3 = sorted[Math.floor(sorted.length * 0.75)]
-  const iqr = q3 - q1
-
-  return {
-    mean,
-    median,
-    stdDev,
-    min,
-    max,
-    q1,
-    q3,
-    iqr,
-    count: values.length,
-  }
-}
-
-function detectOutliers(
-  values: number[],
-  stats: ReturnType<typeof calculateStats>,
-) {
-  if (!stats || stats.stdDev === 0) return []
-
-  const outliers: Array<{ value: number; index: number; zScore: number }> = []
-  const threshold = 2 // 2 standard deviations
-
-  values.forEach((val, idx) => {
-    const zScore = Math.abs((val - stats.mean) / stats.stdDev)
-    if (zScore > threshold) {
-      outliers.push({ value: val, index: idx, zScore })
-    }
-  })
-
-  return outliers.sort((a, b) => b.zScore - a.zScore).slice(0, 10) // Top 10 outliers
-}
-
-function detectTopBottomPerformers(
-  rows: Record<string, any>[],
-  columnName: string,
-  limit: number = 5,
-) {
-  const numericValues = rows
-    .map((row, idx) => ({ value: row[columnName], index: idx }))
-    .filter((item) => isNumeric(item.value))
-    .map((item) => ({ ...item, value: Number(item.value) }))
-    .sort((a, b) => b.value - a.value)
-
-  const top = numericValues.slice(0, limit)
-  const bottom = numericValues.slice(-limit).reverse()
-
-  return { top, bottom }
-}
-
-function detectTimeTrends(rows: Record<string, any>[], columnName: string) {
-  // Simple heuristic: check if column name suggests it's a date/time column
-  const timeKeywords = [
-    'date',
-    'time',
-    'timestamp',
-    'created',
-    'updated',
-    'year',
-    'month',
-    'day',
-  ]
-  const isTimeColumn = timeKeywords.some((keyword) =>
-    columnName.toLowerCase().includes(keyword),
-  )
-
-  if (!isTimeColumn || rows.length < 2) return null
-
-  // Try to extract numeric values and see if they form a sequence
-  const values = extractNumericValues(rows, columnName)
-  if (values.length < 2) return null
-
-  // Calculate percent change
-  const changes: number[] = []
-  for (let i = 1; i < values.length; i++) {
-    if (values[i - 1] !== 0) {
-      const change = ((values[i] - values[i - 1]) / values[i - 1]) * 100
-      changes.push(change)
-    }
-  }
-
-  if (changes.length === 0) return null
-
-  const avgChange = changes.reduce((a, b) => a + b, 0) / changes.length
-  const trend =
-    avgChange > 5 ? 'increasing' : avgChange < -5 ? 'decreasing' : 'stable'
-
-  return {
-    trend,
-    avgChangePercent: avgChange,
-    totalChangePercent:
-      ((values[values.length - 1] - values[0]) / values[0]) * 100,
-  }
-}
-
-function analyzeColumn(
-  rows: Record<string, any>[],
-  column: { name: string; type: string },
-) {
-  const numericValues = extractNumericValues(rows, column.name)
-
-  if (numericValues.length === 0) {
-    return {
-      columnName: column.name,
-      columnType: column.type,
-      hasNumericData: false,
-    }
-  }
-
-  const stats = calculateStats(numericValues)
-  if (!stats) {
-    return {
-      columnName: column.name,
-      columnType: column.type,
-      hasNumericData: false,
-    }
-  }
-
-  const outliers = detectOutliers(numericValues, stats)
-  const topBottom = detectTopBottomPerformers(rows, column.name)
-  const timeTrend = detectTimeTrends(rows, column.name)
-
-  return {
-    columnName: column.name,
-    columnType: column.type,
-    hasNumericData: true,
-    stats,
-    outliers: outliers.length > 0 ? outliers : undefined,
-    topPerformers: topBottom.top.length > 0 ? topBottom.top : undefined,
-    bottomPerformers:
-      topBottom.bottom.length > 0 ? topBottom.bottom : undefined,
-    timeTrend: timeTrend || undefined,
-  }
-}
+// Statistical analysis results from DuckDB queries
+// These types represent the results returned from DuckDB statistical queries
+// The types are defined in the frontend duckdbAnalytics.ts file
 
 export const generateInsights = action({
   args: {
-    columns: v.array(
+    tableName: v.string(),
+    query: v.string(),
+    statisticalAnalyses: v.array(
       v.object({
-        name: v.string(),
-        type: v.string(),
+        columnName: v.string(),
+        columnType: v.string(),
+        hasNumericData: v.boolean(),
+        stats: v.optional(
+          v.object({
+            mean: v.number(),
+            median: v.number(),
+            stdDev: v.number(),
+            min: v.number(),
+            max: v.number(),
+            q1: v.number(),
+            q3: v.number(),
+            iqr: v.number(),
+            count: v.number(),
+          }),
+        ),
+        outliers: v.optional(
+          v.array(
+            v.object({
+              value: v.number(),
+              zScore: v.number(),
+            }),
+          ),
+        ),
+        topPerformers: v.optional(
+          v.array(
+            v.object({
+              value: v.number(),
+            }),
+          ),
+        ),
+        bottomPerformers: v.optional(
+          v.array(
+            v.object({
+              value: v.number(),
+            }),
+          ),
+        ),
+        timeTrend: v.optional(
+          v.object({
+            trend: v.union(
+              v.literal('increasing'),
+              v.literal('decreasing'),
+              v.literal('stable'),
+            ),
+            avgChangePercent: v.number(),
+            totalChangePercent: v.number(),
+          }),
+        ),
       }),
     ),
-    rows: v.array(v.any()),
-    tableName: v.optional(v.string()),
-    query: v.optional(v.string()),
+    rowCount: v.number(),
+    columnCount: v.number(),
     forceRefresh: v.optional(v.boolean()),
   },
-  handler: async (ctx, { columns, rows, tableName, query, forceRefresh }) => {
-    const userId = await checkAuth(ctx)
+  handler: async (
+    ctx,
+    {
+      tableName,
+      query,
+      statisticalAnalyses,
+      rowCount,
+      columnCount,
+      forceRefresh,
+    },
+  ) => {
+    await checkAuth(ctx)
 
-    if (!rows || rows.length === 0) {
+    if (!statisticalAnalyses || statisticalAnalyses.length === 0) {
       return {
         insights: [],
         statisticalFindings: [],
-        error: 'No data to analyze',
+        error: 'No numeric data to analyze',
         cached: false,
       }
     }
 
-    const table = tableName || 'unknown'
     const queryStr = query || 'SELECT * FROM table'
-    const dataHash = simpleHash(
-      JSON.stringify({ columns, rowCount: rows.length }),
+    const cacheKey = generateCacheKey(
+      tableName,
+      queryStr,
+      columnCount,
+      rowCount,
     )
-    const cacheKey = generateCacheKey(table, queryStr, columns, rows.length)
 
     // Check cache first (unless force refresh)
     if (!forceRefresh) {
@@ -322,10 +215,10 @@ export const generateInsights = action({
       }
     }
 
-    // Analyze each numeric column
-    const analyses = columns
-      .map((col) => analyzeColumn(rows, col))
-      .filter((analysis) => analysis.hasNumericData)
+    // Filter to only numeric columns with data
+    const analyses = statisticalAnalyses.filter(
+      (analysis) => analysis.hasNumericData,
+    )
 
     // Build statistical findings summary
     const findings: string[] = []
@@ -373,10 +266,10 @@ export const generateInsights = action({
     try {
       const context = `
 DATASET ANALYSIS:
-- Table: ${tableName || 'Unknown'}
-- Query: ${query || 'SELECT * FROM table'}
-- Rows analyzed: ${rows.length}
-- Columns: ${columns.map((c) => `${c.name} (${c.type})`).join(', ')}
+- Table: ${tableName}
+- Query: ${queryStr}
+- Rows analyzed: ${rowCount}
+- Columns analyzed: ${analyses.length} numeric columns
 
 STATISTICAL FINDINGS:
 ${findings.join('\n')}
@@ -443,9 +336,9 @@ Keep insights concise (1-2 sentences each) and actionable.
       try {
         await ctx.runMutation(api.insights.cacheInsights, {
           cacheKey,
-          tableName: table,
+          tableName: tableName,
           query: queryStr,
-          dataHash,
+          dataHash: cacheKey, // Use cacheKey as dataHash for simplicity
           insights: result.object.insights,
           statisticalFindings: analyses,
         })
@@ -469,9 +362,9 @@ Keep insights concise (1-2 sentences each) and actionable.
       try {
         await ctx.runMutation(api.insights.cacheInsights, {
           cacheKey,
-          tableName: table,
+          tableName: tableName,
           query: queryStr,
-          dataHash,
+          dataHash: cacheKey,
           insights: fallbackInsights,
           statisticalFindings: analyses,
         })

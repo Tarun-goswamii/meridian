@@ -37,6 +37,7 @@ import { IconColumns, IconBrain, IconSparkles } from '@tabler/icons-react'
 import { useDidUpdate } from '@mantine/hooks'
 import usePresence from '@convex-dev/presence/react'
 import FacePile from '@convex-dev/presence/facepile'
+import { analyzeTableWithDuckDB } from '~/utils/duckdbAnalytics'
 
 type TableData = {
   columns: { name: string; type: string }[]
@@ -150,11 +151,20 @@ function RouteComponent() {
     setIsGeneratingInsights(true)
     setInsightsError(null)
     try {
+      // Use DuckDB to analyze the data
+      const statisticalAnalyses = await analyzeTableWithDuckDB(
+        table,
+        query,
+        dataToAnalyze.columns,
+      )
+
+      // Pass the DuckDB analysis results to Convex for AI processing
       const result = await generateInsights({
-        columns: dataToAnalyze.columns,
-        rows: dataToAnalyze.rows,
         tableName: table,
         query: query,
+        statisticalAnalyses: statisticalAnalyses,
+        rowCount: dataToAnalyze.rows.length,
+        columnCount: dataToAnalyze.columns.length,
         forceRefresh: forceRefresh,
       })
 
