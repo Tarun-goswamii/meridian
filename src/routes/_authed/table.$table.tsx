@@ -8,7 +8,7 @@ import { queryDuckDB } from '~/utils/duckdb'
 import { useAction, useMutation } from 'convex/react'
 import { api } from '@/convex/_generated/api'
 import { useReactTable, getCoreRowModel } from '@tanstack/react-table'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { Text, Group, Box, Divider } from '@mantine/core'
 import { QueryEditor } from '~/components/QueryEditor'
 import type { Insight } from '~/components/InsightsPanel'
@@ -21,6 +21,7 @@ import { TableHeader } from '~/components/TableHeader'
 import { DataTable } from '~/components/DataTable'
 import { TableSidebar } from '~/components/TableSidebar'
 import { useTableColumns } from '~/components/useTableColumns'
+import { StatisticalFindingsPanel } from '~/components/StatisticalFindingsPanel'
 
 type TableData = {
   columns: { name: string; type: string }[]
@@ -81,6 +82,7 @@ function RouteComponent() {
   const [insights, setInsights] = useState<Insight[]>([])
   const [isGeneratingInsights, setIsGeneratingInsights] = useState(false)
   const [insightsError, setInsightsError] = useState<string | null>(null)
+  const [statisticalFindings, setStatisticalFindings] = useState<any[]>([])
 
   // Panel toggle state
   const [activePanel, setActivePanel] = useState<
@@ -108,8 +110,10 @@ function RouteComponent() {
 
       // Parse result to get metadata
       let resultMetadata
+      let parsedData: TableData | null = null
       try {
-        const parsed = JSON.parse(result)
+        const parsed = JSON.parse(result) as TableData
+        parsedData = parsed
         resultMetadata = {
           rowCount: parsed.rows?.length,
           columnCount: parsed.columns?.length,
@@ -130,6 +134,25 @@ function RouteComponent() {
 
       await queryClient.invalidateQueries({ queryKey: ['tables', table] })
       setPageIndex(0) // Reset page on query change
+
+      // Generate statistical findings from the executed query result
+      if (
+        parsedData &&
+        parsedData.rows.length > 0 &&
+        parsedData.columns.length > 0
+      ) {
+        try {
+          const statisticalAnalyses = await analyzeTableWithDuckDB(
+            table,
+            query,
+            parsedData.columns,
+          )
+          setStatisticalFindings(statisticalAnalyses)
+        } catch (err) {
+          console.error('Error generating statistical findings:', err)
+          // Don't set error state, just fail silently
+        }
+      }
 
       // Advance to next command in queue if available
       if (
@@ -200,8 +223,10 @@ function RouteComponent() {
 
       if (result.error) {
         setInsightsError(result.error)
+        setStatisticalFindings(result.statisticalFindings || [])
       } else {
         setInsights(result.insights || [])
+        setStatisticalFindings(result.statisticalFindings || [])
       }
     } catch (err) {
       setInsightsError(
@@ -298,6 +323,28 @@ function RouteComponent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.columns])
 
+  // Automatically generate statistical findings when data changes (including on mount)
+  useEffect(() => {
+    const generateStatisticalFindings = async () => {
+      if (data && data.rows.length > 0 && data.columns.length > 0) {
+        try {
+          const statisticalAnalyses = await analyzeTableWithDuckDB(
+            table,
+            query,
+            data.columns,
+          )
+          setStatisticalFindings(statisticalAnalyses)
+        } catch (err) {
+          console.error('Error generating statistical findings:', err)
+          // Don't set error state, just fail silently for auto-generation
+        }
+      }
+    }
+
+    generateStatisticalFindings()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, query, table])
+
   // Filter visible columns based on columnVisibility
   const visibleColumns = useMemo(() => {
     return columns.filter((col) => {
@@ -372,6 +419,7 @@ function RouteComponent() {
               table={reactTable}
               visibleColumnsCount={visibleColumns.length}
             />
+            <StatisticalFindingsPanel findings={statisticalFindings} />
             <Group
               justify="space-between"
               align="center"
