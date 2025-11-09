@@ -1,0 +1,5 @@
+Region,DateGroup,ShippingPartner,PromoCodeUsed
+North,2024-05,GoExpress,NONE
+South,2024-05,GoExpress,NONE
+East,2024-05,QuickLogistics,DISCOUNT10
+West,2024-05,SureMove,NONE

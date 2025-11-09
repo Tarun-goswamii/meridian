@@ -85,6 +85,37 @@ export const getFileForProcessing = query({
   },
 })
 
+// Get file by DuckDB table name
+export const getFileByTableName = query({
+  args: { tableName: v.string() },
+  handler: async (ctx, args) => {
+    const user_id = await checkAuth(ctx)
+
+    const file = await ctx.db
+      .query('files')
+      .filter((q) => q.eq(q.field('uploadedBy'), user_id))
+      .filter((q) => q.eq(q.field('duckdbTableName'), args.tableName))
+      .first()
+
+    if (!file) {
+      return null
+    }
+
+    const url = await ctx.storage.getUrl(file.storageId)
+    if (!url) {
+      return null
+    }
+
+    return {
+      fileId: file._id,
+      url,
+      fileName: file.fileName,
+      fileType: file.fileType,
+      storageId: file.storageId,
+    }
+  },
+})
+
 // Update file with DuckDB table info
 export const updateDuckDBInfo = mutation({
   args: {

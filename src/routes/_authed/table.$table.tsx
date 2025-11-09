@@ -5,39 +5,22 @@ import {
 } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { queryDuckDB } from '~/utils/duckdb'
-import { useAction } from 'convex/react'
+import { useAction, useMutation } from 'convex/react'
 import { api } from '@/convex/_generated/api'
-import {
-  useReactTable,
-  getCoreRowModel,
-  flexRender,
-  type ColumnDef,
-} from '@tanstack/react-table'
+import { useReactTable, getCoreRowModel } from '@tanstack/react-table'
 import { useMemo, useState } from 'react'
-import {
-  Title,
-  Table,
-  ScrollArea,
-  Text,
-  Group,
-  Badge,
-  Box,
-  Divider,
-  Tooltip,
-  ActionIcon,
-  Menu,
-  Checkbox,
-  Button,
-  SegmentedControl,
-} from '@mantine/core'
+import { Text, Group, Box, Divider } from '@mantine/core'
 import { QueryEditor } from '~/components/QueryEditor'
-import { AgentEditor } from '~/components/AgentEditor'
-import { InsightsPanel, type Insight } from '~/components/InsightsPanel'
-import { IconColumns, IconBrain, IconSparkles } from '@tabler/icons-react'
+import type { Insight } from '~/components/InsightsPanel'
 import { useDidUpdate } from '@mantine/hooks'
 import usePresence from '@convex-dev/presence/react'
 import FacePile from '@convex-dev/presence/facepile'
 import { analyzeTableWithDuckDB } from '~/utils/duckdbAnalytics'
+import { PaginationControls } from '~/components/PaginationControls'
+import { TableHeader } from '~/components/TableHeader'
+import { DataTable } from '~/components/DataTable'
+import { TableSidebar } from '~/components/TableSidebar'
+import { useTableColumns } from '~/components/useTableColumns'
 
 type TableData = {
   columns: { name: string; type: string }[]
@@ -100,13 +83,16 @@ function RouteComponent() {
   const [insightsError, setInsightsError] = useState<string | null>(null)
 
   // Panel toggle state
-  const [activePanel, setActivePanel] = useState<'agent' | 'insights'>('agent')
+  const [activePanel, setActivePanel] = useState<
+    'agent' | 'insights' | 'history'
+  >('agent')
 
   const [name] = useState(() => 'User ' + Math.floor(Math.random() * 10000))
   const presenceState = usePresence(api.presence, 'my-chat-room', name)
 
   const askGemini = useAction(api.table_agent.askGemini)
   const generateInsights = useAction(api.insights.generateInsights)
+  const logQuery = useMutation(api.queryLog.logQuery)
 
   const handleExecuteQuery = async () => {
     setIsExecuting(true)
@@ -115,8 +101,33 @@ function RouteComponent() {
     setInsights([])
     setInsightsError(null)
 
+    const startTime = Date.now()
     try {
-      await queryDuckDB({ data: query })
+      const result = await queryDuckDB({ data: query })
+      const executionTime = Date.now() - startTime
+
+      // Parse result to get metadata
+      let resultMetadata
+      try {
+        const parsed = JSON.parse(result)
+        resultMetadata = {
+          rowCount: parsed.rows?.length,
+          columnCount: parsed.columns?.length,
+          executionTimeMs: executionTime,
+        }
+      } catch {
+        resultMetadata = {
+          executionTimeMs: executionTime,
+        }
+      }
+
+      // Log successful query
+      await logQuery({
+        query,
+        success: true,
+        resultMetadata,
+      })
+
       await queryClient.invalidateQueries({ queryKey: ['tables', table] })
       setPageIndex(0) // Reset page on query change
 
@@ -138,7 +149,26 @@ function RouteComponent() {
       }
       // Note: Insights are now generated manually by user clicking a button
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to execute query')
+      const executionTime = Date.now() - startTime
+      const errorMessage =
+        err instanceof Error ? err.message : 'Failed to execute query'
+
+      // Log failed query
+      try {
+        await logQuery({
+          query,
+          success: false,
+          error: errorMessage,
+          resultMetadata: {
+            executionTimeMs: executionTime,
+          },
+        })
+      } catch (logError) {
+        // Don't fail the UI if logging fails
+        console.error('Failed to log query:', logError)
+      }
+
+      setError(errorMessage)
     } finally {
       setIsExecuting(false)
     }
@@ -246,104 +276,7 @@ function RouteComponent() {
   }
 
   // Table columns with type tooltip and column show/hide support
-  const columns = useMemo<ColumnDef<Record<string, any>>[]>(
-    () =>
-      data.columns.map((col) => ({
-        accessorKey: col.name,
-        header: () => (
-          <Group
-            gap={4}
-            align="center"
-            style={{ minWidth: 100, maxWidth: 320, overflow: 'hidden' }}
-          >
-            <Tooltip
-              label={col.type}
-              withArrow
-              position="top"
-              openDelay={300}
-              multiline
-              maw={260}
-            >
-              <Text
-                fw={600}
-                size="xs"
-                c="gray.9"
-                style={{
-                  fontFamily: 'system-ui, -apple-system, sans-serif',
-                  letterSpacing: '-0.01em',
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}
-              >
-                {col.name}
-              </Text>
-            </Tooltip>
-            <Badge
-              size="xs"
-              variant="dot"
-              color="gray"
-              style={{
-                fontWeight: 500,
-                textTransform: 'lowercase',
-                fontFamily:
-                  'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
-                fontSize: '10px',
-                padding: '2px 6px',
-              }}
-            >
-              {col.type}
-            </Badge>
-          </Group>
-        ),
-        cell: (info) => {
-          const value = info.getValue()
-          if (value === null || value === undefined) {
-            return (
-              <Text
-                c="gray.5"
-                fs="italic"
-                size="xs"
-                style={{
-                  fontFamily:
-                    'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
-                }}
-              >
-                NULL
-              </Text>
-            )
-          }
-          const stringValue = String(value)
-          const isNumeric =
-            !isNaN(Number(value)) &&
-            value !== '' &&
-            !isNaN(parseFloat(stringValue))
-          return (
-            <Text
-              size="xs"
-              c={isNumeric ? 'gray.8' : 'gray.9'}
-              style={{
-                fontFamily: isNumeric
-                  ? 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace'
-                  : 'system-ui, -apple-system, sans-serif',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                maxWidth: 260,
-                lineHeight: 1.5,
-              }}
-              title={stringValue.length > 60 ? stringValue : undefined}
-            >
-              {stringValue.length > 60
-                ? stringValue.slice(0, 60) + '…'
-                : stringValue}
-            </Text>
-          )
-        },
-        enableHiding: true,
-      })),
-    [data.columns],
-  )
+  const columns = useTableColumns(data.columns)
 
   // Handle default column visibility on mount
   useDidUpdate(() => {
@@ -397,166 +330,6 @@ function RouteComponent() {
     },
   })
 
-  // Utility for pagination button rendering
-  function PaginationControls() {
-    const totalPages = Math.ceil(data.rows.length / pageSize)
-    const prevDisabled = pageIndex === 0
-    const nextDisabled = pageIndex >= totalPages - 1
-
-    // Only render if more than one page
-    if (totalPages <= 1) return null
-
-    return (
-      <Group gap={8} align="center">
-        <Button
-          variant="subtle"
-          size="xs"
-          onClick={() => setPageIndex(0)}
-          disabled={prevDisabled}
-        >
-          First
-        </Button>
-        <Button
-          variant="subtle"
-          size="xs"
-          onClick={() => setPageIndex((p) => Math.max(0, p - 1))}
-          disabled={prevDisabled}
-        >
-          Prev
-        </Button>
-        <Text size="xs" c="gray.7">
-          Page{' '}
-          <strong>
-            {pageIndex + 1} / {totalPages}
-          </strong>
-        </Text>
-        <Button
-          variant="subtle"
-          size="xs"
-          onClick={() => setPageIndex((p) => Math.min(totalPages - 1, p + 1))}
-          disabled={nextDisabled}
-        >
-          Next
-        </Button>
-        <Button
-          variant="subtle"
-          size="xs"
-          onClick={() => setPageIndex(totalPages - 1)}
-          disabled={nextDisabled}
-        >
-          Last
-        </Button>
-        <Text size="xs" ml={24} c="gray.6">
-          Rows per page:
-        </Text>
-        <select
-          style={{ fontSize: 12, padding: '2px 6px', borderRadius: 4 }}
-          value={pageSize}
-          onChange={(e) => {
-            setPageSize(Number(e.target.value))
-            setPageIndex(0)
-          }}
-        >
-          {[25, 50, 100, 250, 500, 1000].map((sz) => (
-            <option key={sz} value={sz}>
-              {sz}
-            </option>
-          ))}
-        </select>
-      </Group>
-    )
-  }
-
-  // Utility for choosing visible columns with a menu
-  function ColumnsMenu() {
-    if (columns.length <= 10) return null
-    return (
-      <Menu
-        shadow="md"
-        width={260}
-        withinPortal
-        withArrow
-        position="bottom-end"
-        offset={2}
-      >
-        <Menu.Target>
-          <ActionIcon
-            variant="light"
-            color="gray"
-            size="md"
-            style={{ marginLeft: 8 }}
-            aria-label="Show/hide columns"
-          >
-            <IconColumns size={20} />
-          </ActionIcon>
-        </Menu.Target>
-        <Menu.Dropdown style={{ maxHeight: 350, overflowY: 'auto' }}>
-          <Menu.Label>Show/Hide Columns</Menu.Label>
-          {columns.map((col) =>
-            'accessorKey' in col && typeof col.accessorKey === 'string' ? (
-              <Menu.Item
-                key={col.accessorKey}
-                style={{
-                  paddingLeft: 10,
-                  paddingRight: 10,
-                  paddingTop: 2,
-                  paddingBottom: 2,
-                }}
-              >
-                <Checkbox
-                  label={String(col.accessorKey)}
-                  size="xs"
-                  checked={columnVisibility[col.accessorKey] !== false}
-                  onChange={() => {
-                    setColumnVisibility((v) => ({
-                      ...v,
-                      [col.accessorKey]: !(v[col.accessorKey] !== false), // toggle boolean
-                    }))
-                  }}
-                />
-              </Menu.Item>
-            ) : null,
-          )}
-          <Menu.Divider />
-          <Menu.Item
-            color="gray"
-            onClick={() =>
-              setColumnVisibility(
-                Object.fromEntries(
-                  columns.map((col) => [
-                    'accessorKey' in col && typeof col.accessorKey === 'string'
-                      ? col.accessorKey
-                      : '',
-                    true,
-                  ]),
-                ),
-              )
-            }
-          >
-            Show all
-          </Menu.Item>
-          <Menu.Item
-            color="gray"
-            onClick={() =>
-              setColumnVisibility(
-                Object.fromEntries(
-                  columns.map((col) => [
-                    'accessorKey' in col && typeof col.accessorKey === 'string'
-                      ? col.accessorKey
-                      : '',
-                    false,
-                  ]),
-                ),
-              )
-            }
-          >
-            Hide all
-          </Menu.Item>
-        </Menu.Dropdown>
-      </Menu>
-    )
-  }
-
   return (
     <>
       <Box
@@ -586,173 +359,19 @@ function RouteComponent() {
               overflow: 'hidden',
             }}
           >
-            <Group justify="space-between" align="center" wrap="nowrap">
-              <Group gap="xs">
-                <Title
-                  order={2}
-                  fw={600}
-                  c="gray.9"
-                  style={{
-                    fontFamily: 'system-ui, -apple-system, sans-serif',
-                    maxWidth: 350,
-                    whiteSpace: 'nowrap',
-                    textOverflow: 'ellipsis',
-                    overflow: 'hidden',
-                  }}
-                  title={table}
-                >
-                  {table}
-                </Title>
-                <Badge
-                  size="sm"
-                  variant="dot"
-                  color="gray"
-                  style={{
-                    fontWeight: 500,
-                    textTransform: 'none',
-                    letterSpacing: '0.01em',
-                  }}
-                >
-                  {data.columns.length} column
-                  {data.columns.length === 1 ? '' : 's'}
-                </Badge>
-                <ColumnsMenu />
-              </Group>
-              <Badge
-                size="md"
-                variant="filled"
-                color="blue"
-                style={{
-                  fontWeight: 600,
-                  textTransform: 'none',
-                  letterSpacing: '0.01em',
-                }}
-              >
-                {data.rows.length.toLocaleString()} row
-                {data.rows.length === 1 ? '' : 's'}
-              </Badge>
-            </Group>
+            <TableHeader
+              tableName={table}
+              columnCount={data.columns.length}
+              rowCount={data.rows.length}
+              columns={columns}
+              columnVisibility={columnVisibility}
+              onVisibilityChange={setColumnVisibility}
+            />
             <Divider mb="xl" style={{ borderColor: 'rgba(0, 0, 0, 0.06)' }} />
-            <ScrollArea
-              type="auto"
-              offsetScrollbars
-              style={{
-                maxHeight: 'calc(100vh - 265px)',
-                minHeight: 300,
-                borderRadius: 4,
-                background: 'white',
-                overflow: 'auto',
-              }}
-              scrollbarSize={10}
-              scrollHideDelay={300}
-              h="100%"
-              w="100%"
-            >
-              <ScrollArea
-                type="auto"
-                offsetScrollbars
-                scrollHideDelay={300}
-                style={{
-                  minWidth: Math.max(960, visibleColumns.length * 160),
-                  width: '100%',
-                  overflowX: 'auto',
-                }}
-                scrollbarSize={8}
-                h="100%"
-              >
-                <Table
-                  striped
-                  highlightOnHover
-                  withColumnBorders
-                  verticalSpacing="sm"
-                  horizontalSpacing="sm"
-                  style={{
-                    borderCollapse: 'separate',
-                    tableLayout: 'auto',
-                    minWidth:
-                      visibleColumns.length < 8
-                        ? undefined
-                        : visibleColumns.length * 140,
-                    maxWidth: 2600,
-                  }}
-                  styles={{
-                    thead: {
-                      backgroundColor: 'rgba(0, 0, 0, 0.02)',
-                      borderBottom: '2px solid rgba(0, 0, 0, 0.08)',
-                      zIndex: 2,
-                      top: 0,
-                      position: 'sticky',
-                    },
-                    th: {
-                      padding: '8px 10px',
-                      borderBottom: '1px solid rgba(0, 0, 0, 0.06)',
-                      backgroundColor: 'rgba(250,250,250,0.95)',
-                      overflow: 'hidden',
-                      whiteSpace: 'nowrap',
-                      position: 'sticky',
-                      top: 0,
-                      fontSize: 12,
-                      maxWidth: 300,
-                    },
-                    td: {
-                      padding: '7px 10px',
-                      borderBottom: '1px solid rgba(0, 0, 0, 0.04)',
-                      fontSize: 12,
-                      maxWidth: 300,
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                    },
-                    tr: {
-                      '&:hover': {
-                        backgroundColor: 'rgba(0, 0, 0, 0.01)',
-                      },
-                    },
-                  }}
-                >
-                  <thead>
-                    {reactTable.getHeaderGroups().map((headerGroup) => (
-                      <tr key={headerGroup.id}>
-                        {headerGroup.headers.map((header) => (
-                          <th key={header.id}>
-                            {header.isPlaceholder
-                              ? null
-                              : flexRender(
-                                  header.column.columnDef.header,
-                                  header.getContext(),
-                                )}
-                          </th>
-                        ))}
-                      </tr>
-                    ))}
-                  </thead>
-                  <tbody>
-                    {reactTable.getRowModel().rows.length === 0 ? (
-                      <tr>
-                        <td colSpan={visibleColumns.length}>
-                          <Text c="dimmed" ta="center" py="md">
-                            No data available
-                          </Text>
-                        </td>
-                      </tr>
-                    ) : (
-                      reactTable.getRowModel().rows.map((row) => (
-                        <tr key={row.id}>
-                          {row.getVisibleCells().map((cell) => (
-                            <td key={cell.id}>
-                              {flexRender(
-                                cell.column.columnDef.cell,
-                                cell.getContext(),
-                              )}
-                            </td>
-                          ))}
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </Table>
-              </ScrollArea>
-            </ScrollArea>
+            <DataTable
+              table={reactTable}
+              visibleColumnsCount={visibleColumns.length}
+            />
             <Group
               justify="space-between"
               align="center"
@@ -782,112 +401,43 @@ function RouteComponent() {
                   {visibleColumns.length} × {data.rows.length}
                 </Text>
               </Group>
-              <PaginationControls />
+              <PaginationControls
+                totalRows={data.rows.length}
+                pageSize={pageSize}
+                pageIndex={pageIndex}
+                onPageSizeChange={setPageSize}
+                onPageIndexChange={setPageIndex}
+              />
             </Group>
           </Box>
         </Box>
 
-        {/* Right Sidebar - Toggle between Agent and Insights */}
-        <Box
-          style={{
-            position: 'fixed',
-            right: 15,
-            top: 10, // Navbar height (approximate)
-            bottom: 0,
-            width: 400,
-            zIndex: 200,
-            padding: '16px',
-            backgroundColor: 'transparent',
-            display: 'flex',
-            flexDirection: 'column',
-            height: 'calc(100vh - 60px)',
-            gap: '12px',
+        <TableSidebar
+          activePanel={activePanel}
+          onPanelChange={setActivePanel}
+          tableName={table}
+          onRollbackComplete={() => {
+            queryClient.invalidateQueries({ queryKey: ['tables', table] })
+            setPageIndex(0)
           }}
-        >
-          {/* Toggle Header */}
-          <Box
-            p="xs"
-            style={{
-              backgroundColor: 'rgba(255, 255, 255, 0.9)',
-              backdropFilter: 'blur(10px)',
-              WebkitBackdropFilter: 'blur(10px)',
-              borderRadius: 'var(--mantine-radius-md)',
-              border: '1px solid rgba(0, 0, 0, 0.1)',
-              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
-            }}
-          >
-            <SegmentedControl
-              value={activePanel}
-              onChange={(value) =>
-                setActivePanel(value as 'agent' | 'insights')
-              }
-              data={[
-                {
-                  value: 'agent',
-                  label: (
-                    <Group gap={6} style={{ justifyContent: 'center' }}>
-                      <IconSparkles size={16} />
-                      <Text size="xs" fw={500}>
-                        Agent
-                      </Text>
-                    </Group>
-                  ),
-                },
-                {
-                  value: 'insights',
-                  label: (
-                    <Group gap={6} style={{ justifyContent: 'center' }}>
-                      <IconBrain size={16} />
-                      <Text size="xs" fw={500}>
-                        Insights
-                      </Text>
-                      {insights.length > 0 && (
-                        <Badge
-                          size="xs"
-                          variant="filled"
-                          color="violet"
-                          style={{ minWidth: 18, height: 18, padding: '0 4px' }}
-                        >
-                          {insights.length}
-                        </Badge>
-                      )}
-                    </Group>
-                  ),
-                },
-              ]}
-              fullWidth
-              size="sm"
-            />
-          </Box>
-
-          {/* Active Panel Content */}
-          <Box style={{ flex: 1, minHeight: 0 }}>
-            {activePanel === 'agent' ? (
-              <AgentEditor
-                input={agentInput}
-                onInputChange={setAgentInput}
-                onExecute={handleAgentAction}
-                error={agentError}
-                onErrorClose={() => setAgentError(null)}
-                isExecuting={isAgentExecuting}
-                description={agentDescription}
-                messages={messages}
-                commandQueue={commandQueue}
-                currentCommandIndex={currentCommandIndex}
-              />
-            ) : (
-              <InsightsPanel
-                insights={insights}
-                isLoading={isGeneratingInsights}
-                onGenerate={handleGenerateInsights}
-                onRefresh={handleRefreshInsights}
-                onDismiss={handleDismissInsights}
-                error={insightsError}
-                hasData={data && data.rows.length > 0}
-              />
-            )}
-          </Box>
-        </Box>
+          insights={insights}
+          agentInput={agentInput}
+          onAgentInputChange={setAgentInput}
+          onAgentExecute={handleAgentAction}
+          agentError={agentError}
+          onAgentErrorClose={() => setAgentError(null)}
+          isAgentExecuting={isAgentExecuting}
+          agentDescription={agentDescription}
+          messages={messages}
+          commandQueue={commandQueue}
+          currentCommandIndex={currentCommandIndex}
+          isGeneratingInsights={isGeneratingInsights}
+          onGenerateInsights={handleGenerateInsights}
+          onRefreshInsights={handleRefreshInsights}
+          onDismissInsights={handleDismissInsights}
+          insightsError={insightsError}
+          hasData={data && data.rows.length > 0}
+        />
 
         {/* Query Editor - Fixed at Bottom */}
         <Box

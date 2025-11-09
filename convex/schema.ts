@@ -40,4 +40,21 @@ export default defineSchema({
   })
     .index('by_cacheKey', ['cacheKey'])
     .index('by_userId', ['userId']),
+  queryLog: defineTable({
+    query: v.string(),
+    executedAt: v.number(),
+    userId: v.string(),
+    success: v.boolean(),
+    error: v.optional(v.string()),
+    sequenceNumber: v.number(),
+    resultMetadata: v.optional(
+      v.object({
+        rowCount: v.optional(v.number()),
+        columnCount: v.optional(v.number()),
+        executionTimeMs: v.optional(v.number()),
+      }),
+    ),
+  })
+    .index('by_userId', ['userId'])
+    .index('by_sequenceNumber', ['sequenceNumber']),
 })
