@@ -8,13 +8,17 @@ import {
   Group,
   Badge,
   Tooltip,
-  Stack,
   Divider,
   Paper,
-  Code,
   Loader,
+  ThemeIcon,
 } from '@mantine/core'
-import { IconCheck, IconX, IconHistory } from '@tabler/icons-react'
+import {
+  IconCheck,
+  IconX,
+  IconHistory,
+  IconCircleDot,
+} from '@tabler/icons-react'
 import { useState, useEffect } from 'react'
 import { queryDuckDB } from '~/utils/duckdb'
 import { createTableFromCSV } from '~/utils/duckdb'
@@ -51,6 +55,22 @@ type LogType = {
   executedAt: number
 }
 
+function getQuerySummary(query: string): string {
+  // Try to extract the first word and the first table name or identifier
+  // e.g. "UPDATE users SET ..." => "UPDATE users"
+  // e.g. "SELECT * FROM foo WHERE ..." => "SELECT foo"
+  const match = query.match(
+    /^\s*(\w+)\s+(?:\*|[\w, ]+)?(?:FROM|INTO|TABLE)?\s*([a-zA-Z0-9_]+)/i,
+  )
+  if (match) {
+    return `${match[1].toUpperCase()} ${match[2]}`
+  }
+  // fallback to first 30 chars
+  return (
+    query.slice(0, 30).replace(/\s+/g, ' ') + (query.length > 30 ? '...' : '')
+  )
+}
+
 export function QueryTimeline({
   tableName,
   onRollbackComplete,
@@ -59,11 +79,15 @@ export function QueryTimeline({
   const fileInfo = useQuery(api.csv.getFileByTableName, { tableName })
 
   const [isRollingBack, setIsRollingBack] = useState<number | null>(null)
-  const [rollbackSequenceNumber, setRollbackSequenceNumber] = useState<number | null>(null)
+  const [rollbackSequenceNumber, setRollbackSequenceNumber] = useState<
+    number | null
+  >(null)
 
   const logs = useQuery(
     api.queryLog.getQueryLogsUpTo,
-    rollbackSequenceNumber !== null ? { sequenceNumber: rollbackSequenceNumber } : 'skip'
+    rollbackSequenceNumber !== null
+      ? { sequenceNumber: rollbackSequenceNumber }
+      : 'skip',
   )
 
   useEffect(() => {
@@ -72,10 +96,7 @@ export function QueryTimeline({
       rollbackSequenceNumber !== null &&
       isRollingBack !== null // prevent double-rollback if already finished
     ) {
-      performRollback(
-        logs as LogType[],
-        rollbackSequenceNumber
-      )
+      performRollback(logs as LogType[], rollbackSequenceNumber)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [logs, rollbackSequenceNumber])
@@ -172,7 +193,7 @@ export function QueryTimeline({
       // eslint-disable-next-line no-console
       console.error('Rollback failed:', error)
       alert(
-        `Rollback failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Rollback failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
       )
     } finally {
       setIsRollingBack(null)
@@ -180,48 +201,210 @@ export function QueryTimeline({
     }
   }
 
+  // Timeline line and dot component
+  function TimelineLine({
+    isFirst,
+    isLast,
+    color,
+    lineHeight = 48,
+  }: {
+    isFirst: boolean
+    isLast: boolean
+    color: string
+    lineHeight?: number
+  }) {
+    // The lineHeight prop allows us to control the vertical space between dots.
+    // We'll use absolute positioning for the vertical line so it connects all dots.
+    return (
+      <Box
+        style={{
+          position: 'relative',
+          width: 24,
+          minHeight: lineHeight,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          zIndex: 1,
+        }}
+      >
+        {/* Vertical line connecting all dots */}
+        {!isFirst && (
+          <Box
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: '50%',
+              width: 2,
+              height: '50%',
+              background: '#dee2e6',
+              opacity: 0.6,
+              transform: 'translateX(-50%)',
+              zIndex: 0,
+            }}
+          />
+        )}
+        {/* Dot */}
+        <Box
+          style={{
+            position: 'relative',
+            zIndex: 2,
+            background: '#fff',
+            borderRadius: '50%',
+            border: `2px solid ${color === 'green' ? '#51cf66' : color === 'red' ? '#fa5252' : '#868e96'}`,
+            width: 18,
+            height: 18,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <ThemeIcon
+            radius="xl"
+            size={8}
+            color={color}
+            style={{
+              background: '#fff',
+              border: 'none',
+              boxShadow: 'none',
+            }}
+          >
+            <IconCircleDot size={12} />
+          </ThemeIcon>
+        </Box>
+        {/* Bottom line */}
+        {!isLast && (
+          <Box
+            style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              width: 2,
+              height: '50%',
+              background: '#dee2e6',
+              opacity: 0.6,
+              transform: 'translateX(-50%)',
+              zIndex: 0,
+            }}
+          />
+        )}
+      </Box>
+    )
+  }
+
   return (
     <Box
       p="md"
-      style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+      style={{
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        background: '#f8fafc',
+        borderRadius: 12,
+      }}
     >
       <Group mb="md" justify="space-between" align="center">
         <Group gap="xs">
-          <IconHistory size={18} />
-          <Text fw={600} size="sm">
-            Query History
+          <IconHistory size={20} />
+          <Text fw={700} size="md" style={{ letterSpacing: 0.5 }}>
+            Query Timeline
           </Text>
         </Group>
-        <Badge size="sm" variant="light">
+        <Badge
+          size="sm"
+          variant="gradient"
+          gradient={{ from: 'indigo', to: 'cyan', deg: 90 }}
+        >
           {queryLogs.length} queries
         </Badge>
       </Group>
 
       <ScrollArea style={{ flex: 1 }}>
-        <Stack gap="xs">
+        <Box
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 0,
+            position: 'relative',
+            marginLeft: 8,
+          }}
+        >
           {queryLogs.map((log, index) => {
+            const isFirst = index === 0
             const isLast = index === queryLogs.length - 1
             const isRollingBackToThis = isRollingBack === log.sequenceNumber
+            const color = log.success ? 'green' : 'red'
 
             return (
-              <Paper
+              <Group
                 key={log._id}
-                p="sm"
-                withBorder
+                align="flex-start"
+                gap={0}
                 style={{
                   position: 'relative',
                   opacity: isRollingBackToThis ? 0.6 : 1,
+                  marginBottom: isLast ? 0 : 0,
                 }}
               >
-                <Group justify="space-between" align="flex-start" gap="xs">
-                  <Box style={{ flex: 1, minWidth: 0 }}>
-                    <Group gap="xs" mb="xs" wrap="nowrap">
+                {/* Timeline line and dot */}
+                <TimelineLine
+                  isFirst={isFirst}
+                  isLast={isLast}
+                  color={color}
+                  lineHeight={72}
+                />
+
+                {/* Timeline card */}
+                <Paper
+                  shadow="xs"
+                  radius="md"
+                  p="sm"
+                  withBorder
+                  style={{
+                    flex: 1,
+                    marginLeft: 8,
+                    marginBottom: isLast ? 0 : 8,
+                    background: log.success ? '#e6fcf5' : '#fff0f0',
+                    borderColor: log.success ? '#51cf66' : '#fa5252',
+                    minWidth: 0,
+                    transition: 'box-shadow 0.2s',
+                  }}
+                >
+                  <Group
+                    justify="space-between"
+                    align="flex-start"
+                    gap="xs"
+                    wrap="nowrap"
+                  >
+                    <Group gap="xs" align="center" wrap="nowrap">
                       {log.success ? (
-                        <IconCheck size={16} color="green" />
+                        <Tooltip label="Success" withArrow>
+                          <ThemeIcon
+                            color="green"
+                            size="sm"
+                            radius="xl"
+                            variant="light"
+                          >
+                            <IconCheck size={14} />
+                          </ThemeIcon>
+                        </Tooltip>
                       ) : (
-                        <IconX size={16} color="red" />
+                        <Tooltip label="Failed" withArrow>
+                          <ThemeIcon
+                            color="red"
+                            size="sm"
+                            radius="xl"
+                            variant="light"
+                          >
+                            <IconX size={14} />
+                          </ThemeIcon>
+                        </Tooltip>
                       )}
-                      <Text size="xs" c="dimmed" fw={500}>
+                      <Text
+                        size="xs"
+                        fw={600}
+                        c="dimmed"
+                        style={{ fontFamily: 'monospace' }}
+                      >
                         #{log.sequenceNumber}
                       </Text>
                       <Text size="xs" c="dimmed">
@@ -233,72 +416,73 @@ export function QueryTimeline({
                         </Badge>
                       )}
                     </Group>
+                    {!isLast && (
+                      <Tooltip label="Rollback to after this query" withArrow>
+                        <Button
+                          size="xs"
+                          onClick={() => handleRollback(log.sequenceNumber)}
+                          loading={isRollingBackToThis}
+                          disabled={isRollingBack !== null}
+                          style={{ fontWeight: 600 }}
+                        >
+                          Rollback
+                        </Button>
+                      </Tooltip>
+                    )}
+                  </Group>
 
-                    <Code
-                      block
+                  <Group gap="xs" mt={4} align="center">
+                    {/* Show the full query in a gray, scrollable, 2-line-tall box */}
+                    <Box
                       style={{
-                        fontSize: '11px',
-                        maxHeight: '60px',
-                        overflow: 'auto',
-                        wordBreak: 'break-all',
+                        background: '#f1f3f5',
+                        borderRadius: 6,
+                        padding: '6px 10px',
+                        fontFamily: 'monospace',
+                        fontSize: 13,
+                        color: '#495057',
+                        maxHeight: 40, // ~2 lines
+                        overflowX: 'auto',
+                        overflowY: 'auto',
+                        whiteSpace: 'pre',
+                        lineHeight: 1.3,
+                        width: '100%',
+                        minWidth: 0,
+                        boxSizing: 'border-box',
                       }}
                     >
-                      {log.query.length > 200
-                        ? `${log.query.substring(0, 200)}...`
-                        : log.query}
-                    </Code>
-
-                    {log.error && (
-                      <Text size="xs" c="red" mt="xs">
-                        Error: {log.error}
-                      </Text>
-                    )}
-
+                      {log.query}
+                    </Box>
                     {log.resultMetadata && (
-                      <Group gap="xs" mt="xs">
+                      <>
                         {log.resultMetadata.rowCount !== undefined && (
-                          <Text size="xs" c="dimmed">
+                          <Badge size="xs" color="teal" variant="light">
                             {log.resultMetadata.rowCount.toLocaleString()} rows
-                          </Text>
+                          </Badge>
                         )}
                         {log.resultMetadata.columnCount !== undefined && (
-                          <Text size="xs" c="dimmed">
-                            {log.resultMetadata.columnCount} columns
-                          </Text>
+                          <Badge size="xs" color="blue" variant="light">
+                            {log.resultMetadata.columnCount} cols
+                          </Badge>
                         )}
-                      </Group>
+                      </>
                     )}
-                  </Box>
-
-                  {!isLast && (
-                    <Tooltip label="Rollback to before this query">
-                      <Button
-                        size="xs"
-                        variant="light"
-                        color="orange"
-                        onClick={() => handleRollback(log.sequenceNumber)}
-                        loading={isRollingBackToThis}
-                        disabled={isRollingBack !== null}
-                      >
-                        Rollback
-                      </Button>
-                    </Tooltip>
+                  </Group>
+                  {log.error && (
+                    <Text
+                      size="xs"
+                      c="red"
+                      mt={4}
+                      style={{ fontFamily: 'monospace' }}
+                    >
+                      Error: {log.error}
+                    </Text>
                   )}
-                </Group>
-
-                {!isLast && (
-                  <Divider
-                    mt="sm"
-                    style={{
-                      borderColor: 'rgba(0, 0, 0, 0.1)',
-                      borderStyle: 'dashed',
-                    }}
-                  />
-                )}
-              </Paper>
+                </Paper>
+              </Group>
             )
           })}
-        </Stack>
+        </Box>
       </ScrollArea>
     </Box>
   )

@@ -20,10 +20,6 @@ export const logQuery = mutation({
   handler: async (ctx, args) => {
     const userId = await checkAuth(ctx)
 
-    if (!args.success || args.error) {
-      throw new Error('Failed to log query; has error')
-    }
-
     // Get the highest sequence number across all users (global sequence)
     // This ensures queries are ordered globally, not per-user
     const allQueries = await ctx.db.query('queryLog').collect()

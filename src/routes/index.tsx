@@ -4,11 +4,13 @@ import {
   Title,
   Text,
   Button,
-  Group,
-  ThemeIcon,
-  List,
-  Paper,
+  Badge,
   Stack,
+  List,
+  ThemeIcon,
+  Image,
+  Paper,
+  Group,
 } from '@mantine/core'
 import {
   IconBolt,
@@ -17,6 +19,8 @@ import {
   IconUpload,
   IconEdit,
 } from '@tabler/icons-react'
+import { motion } from 'motion/react'
+import classes from '@/public/styles/index.module.css'
 
 export const Route = createFileRoute('/')({
   component: RouteComponent,
@@ -27,45 +31,118 @@ export const Route = createFileRoute('/')({
 
 function RouteComponent() {
   return (
-    <Container size="lg" py={60}>
-      <Stack align="center" spacing="xl">
-        <ThemeIcon size={64} radius="xl" color="yellow" variant="light">
-          <IconBolt size={40} />
-        </ThemeIcon>
-        <Title order={1} align="center" fw={900} size={48} c="dark">
-          Insite
-        </Title>
-        <Text align="center" size="xl" c="dimmed" maw={600}>
-          Collaborative platform for data science projects; for non-data science
-          people. Upload files, create data frames and insights, modify the data
-          as needed, generate charts, work with coworkers in real-time (queries
-          made by them will be shown), do everything while moving in{' '}
-          <b>LIGHTNING ⚡ speed</b>.
-        </Text>
-        <Group mt="md" spacing="md">
-          <Button
-            size="lg"
-            radius="xl"
-            component={Link}
-            to="/dashboard"
-            color="yellow"
-            leftSection={<IconBolt size={20} />}
+    <Container
+      bg="var(--mantine-color-body)"
+      px={0}
+      py={{
+        base: 'calc(var(--mantine-spacing-lg) * 4)',
+        xs: 'calc(var(--mantine-spacing-lg) * 5)',
+        lg: 'calc(var(--mantine-spacing-lg) * 6)',
+      }}
+      fluid
+    >
+      <Container size="md" px={0}>
+        <Stack align="center" gap="xs">
+          <motion.div
+            initial={{ opacity: 0.0, y: 40 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, ease: 'easeInOut' }}
+            viewport={{ once: true }}
           >
-            Get Started
-          </Button>
-          <Button
-            size="lg"
-            radius="xl"
-            variant="outline"
-            component="a"
-            href="https://github.com/"
-            target="_blank"
+            <Title
+              order={1}
+              fw={900}
+              fz={48}
+              c="dark"
+              mb="sm"
+              ta="center"
+              style={{ textWrap: 'balance' }}
+            >
+              Insite
+            </Title>
+          </motion.div>
+          <motion.div
+            initial={{ opacity: 0.0 }}
+            whileInView={{ opacity: 1 }}
+            transition={{ duration: 0.8, delay: 0.4, ease: 'easeInOut' }}
+            viewport={{ once: true }}
           >
-            GitHub
-          </Button>
-        </Group>
-        <Paper shadow="md" p="xl" radius="lg" mt={40} maw={700} w="100%">
-          <Title order={3} mb="md" align="center">
+            <Text
+              c="dimmed"
+              fz="xl"
+              ta="center"
+              mb="xl"
+              style={{ textWrap: 'balance', maxWidth: 600 }}
+            >
+              Collaborative platform for data science projects; for non-data
+              science people. Upload files, create data frames and insights,
+              modify the data as needed, generate charts, work with coworkers in
+              real-time (queries made by them will be shown), do everything
+              while moving in <b>LIGHTNING ⚡ speed</b>.
+            </Text>
+          </motion.div>
+          <motion.div
+            initial={{ opacity: 0.0, y: 40 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.6, ease: 'easeInOut' }}
+            viewport={{ once: true }}
+          >
+            <Group mt="md" gap="md">
+              <motion.div whileHover={{ scale: 1.1 }}>
+                <Button
+                  size="lg"
+                  radius="xl"
+                  component={Link}
+                  to="/dashboard"
+                  color="yellow"
+                  leftSection={<IconBolt size={20} />}
+                  className={classes.cta}
+                >
+                  Get Started
+                </Button>
+              </motion.div>
+              <motion.div whileHover={{ scale: 1.1 }}>
+                <Button
+                  size="lg"
+                  radius="xl"
+                  variant="outline"
+                  component="a"
+                  href="https://github.com/"
+                  target="_blank"
+                  className={classes.cta}
+                >
+                  GitHub
+                </Button>
+              </motion.div>
+            </Group>
+          </motion.div>
+        </Stack>
+      </Container>
+      <Container size="xl" mt="calc(var(--mantine-spacing-xl) * 2)" px={0}>
+        <motion.div
+          initial={{ opacity: 0.0, y: 40 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.8, ease: 'easeInOut' }}
+          viewport={{ once: true }}
+        >
+          <motion.div
+            whileHover={{ scale: 1.05, boxShadow: 'var(--mantine-shadow-xl)' }}
+            transition={{ type: 'spring' }}
+          >
+            <Image
+              src="/hero.png"
+              radius="sm"
+              alt="Insite Hero"
+              width={1920}
+              height={800}
+              style={{ objectFit: 'contain' }}
+            />
+          </motion.div>
+        </motion.div>
+      </Container>
+      <Container size="md" px={0} mt="xl">
+        <Paper shadow="md" p="xl" radius="lg" maw={700} w="100%" mx="auto">
+          <Title order={3} mb="md" ta="center">
             Why Insite?
           </Title>
           <List
@@ -118,10 +195,10 @@ function RouteComponent() {
             </List.Item>
           </List>
         </Paper>
-        <Text align="center" size="sm" c="dimmed" mt="xl">
+        <Text ta="center" size="sm" c="dimmed" mt="xl">
           Made with ❤️ for teams who want to move fast.
         </Text>
-      </Stack>
+      </Container>
     </Container>
   )
 }
