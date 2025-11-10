@@ -32,10 +32,6 @@ export const fetchDuckDBQuery = action({
   handler: async (ctx, { query }) => {
     const serverUrl =
       process.env.DUCKDB_SERVER_URL || 'https://169d9edabf2c.ngrok-free.app'
-    console.log('[fetchDuckDBQuery] About to fetch', {
-      url: `${serverUrl}/api/duckdb/query`,
-      query,
-    })
 
     const response = await fetch(`${serverUrl}/api/duckdb/query`, {
       method: 'POST',
@@ -43,15 +39,12 @@ export const fetchDuckDBQuery = action({
       body: JSON.stringify({ query }),
     })
 
-    console.log('[fetchDuckDBQuery] Fetch response status:', response.status)
     if (!response.ok) {
       const text = await response.text().catch(() => '')
-      console.error('[fetchDuckDBQuery] HTTP error', response.status, text)
       throw new Error(`HTTP error! status: ${response.status} body: ${text}`)
     }
 
     const result = await response.json()
-    console.log('[fetchDuckDBQuery] Result:', result)
     return result
   },
 })
@@ -80,7 +73,6 @@ const queryDuckDB: any = createTool({
         columnCount: result.columns?.length || 0,
       }
     } catch (error) {
-      console.error('[queryDuckDB] Error:', error)
       return {
         success: false,
         error:
@@ -100,11 +92,9 @@ const getTableSchema: any = createTool({
   handler: async (ctx, args) => {
     try {
       const query = `DESCRIBE ${args.tableName}`
-      console.log('[getTableSchema] About to fetch schema for:', args.tableName)
       const result = await ctx.runAction(api.table_agent.fetchDuckDBQuery, {
         query,
       })
-      console.log('[getTableSchema] Result:', result)
       return {
         success: true,
         tableName: args.tableName,
@@ -112,7 +102,6 @@ const getTableSchema: any = createTool({
         rows: result.rows || [],
       }
     } catch (error) {
-      console.error('[getTableSchema] Error:', error)
       return {
         success: false,
         error:
@@ -138,14 +127,9 @@ const getSampleRows: any = createTool({
     try {
       const limit = Math.min(Math.max(args.limit || 10, 1), 100)
       const query = `SELECT * FROM ${args.tableName} LIMIT ${limit}`
-      console.log(
-        '[getSampleRows] About to fetch sample rows for:',
-        args.tableName,
-      )
       const result = await ctx.runAction(api.table_agent.fetchDuckDBQuery, {
         query,
       })
-      console.log('[getSampleRows] Result:', result)
       return {
         success: true,
         tableName: args.tableName,
@@ -154,7 +138,6 @@ const getSampleRows: any = createTool({
         rowCount: result.rows?.length || 0,
       }
     } catch (error) {
-      console.error('[getSampleRows] Error:', error)
       return {
         success: false,
         error:
@@ -231,7 +214,6 @@ export const askGemini = action({
 
     // Update server URL if provided
     if (serverUrl) {
-      console.log('[askGemini] Overriding DUCKDB_SERVER_URL with:', serverUrl)
       process.env.DUCKDB_SERVER_URL = serverUrl
     }
 
@@ -266,8 +248,6 @@ Please write a DuckDB SQL queries for the table "${tableName}" based on the user
 
       // Ensure Gemini prompt does not exceed limit
       contextualPrompt = trimToLimit(contextualPrompt, GEMINI_PROMPT_LIMIT)
-
-      console.log('[askGemini] Query mode contextualPrompt:', contextualPrompt)
 
       const res = await agent.generateObject(
         ctx,
@@ -305,7 +285,6 @@ Please write a DuckDB SQL queries for the table "${tableName}" based on the user
           toolSteps: [], // Query mode doesn't use tools
         }
       } catch (error) {
-        console.error('[askGemini] Error in query mode:', error)
         return {
           mode: 'query' as const,
           commands: [],
@@ -330,11 +309,6 @@ Use the available tools to explore the database and provide a helpful answer. Sh
 
       // Ensure Gemini prompt does not exceed limit
       contextualPrompt = trimToLimit(contextualPrompt, GEMINI_PROMPT_LIMIT)
-
-      console.log(
-        '[askGemini] Analysis mode contextualPrompt:',
-        contextualPrompt,
-      )
 
       const res = await agent.generateText(
         ctx,
