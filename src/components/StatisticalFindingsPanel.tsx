@@ -264,7 +264,7 @@ export function StatisticalFindingsPanel({
         </Button>
       </Group>
       <Collapse in={opened}>
-        <ScrollArea type="auto" h={320} style={{ marginBottom: 0 }}>
+        <ScrollArea type="auto" style={{ marginBottom: 0 }}>
           <MantineTable
             striped
             highlightOnHover

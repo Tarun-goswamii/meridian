@@ -13,6 +13,7 @@ import {
   Collapse,
   ActionIcon,
   Badge,
+  SegmentedControl,
 } from '@mantine/core'
 import {
   IconSparkles,
@@ -23,10 +24,18 @@ import {
   IconCode,
 } from '@tabler/icons-react'
 
+interface ToolStep {
+  tool: string
+  args: any
+  result?: any
+}
+
 interface Message {
   role: 'user' | 'assistant'
   content: string
   commands?: string[]
+  toolSteps?: ToolStep[]
+  mode?: 'query' | 'analysis'
 }
 
 interface MessagePairProps {
@@ -89,6 +98,55 @@ function MessagePair({ user, assistant }: MessagePairProps) {
               >
                 {assistant.content}
               </Text>
+
+              {/* Tool Steps */}
+              {assistant.toolSteps && assistant.toolSteps.length > 0 && (
+                <Box mt="xs" pl={24}>
+                  <Group gap="xs" mb={4}>
+                    <IconCode
+                      size={12}
+                      style={{ color: 'var(--mantine-color-blue-6)' }}
+                    />
+                    <Text size="xs" c="blue" fw={500}>
+                      Tool Usage ({assistant.toolSteps.length})
+                    </Text>
+                  </Group>
+                  <Stack gap="xs">
+                    {assistant.toolSteps.map((step, idx) => (
+                      <Box
+                        key={idx}
+                        p="xs"
+                        style={{
+                          backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                          borderRadius: 'var(--mantine-radius-xs)',
+                          border: '1px solid rgba(59, 130, 246, 0.2)',
+                        }}
+                      >
+                        <Text size="xs" fw={500} c="blue" mb={4}>
+                          {step.tool}
+                        </Text>
+                        {step.args && (
+                          <Text size="xs" c="dimmed" mb={4}>
+                            Args: {JSON.stringify(step.args, null, 2)}
+                          </Text>
+                        )}
+                        {step.result && (
+                          <Text size="xs" c="dimmed">
+                            Result:{' '}
+                            {JSON.stringify(step.result, null, 2).substring(
+                              0,
+                              200,
+                            )}
+                            {JSON.stringify(step.result, null, 2).length > 200
+                              ? '...'
+                              : ''}
+                          </Text>
+                        )}
+                      </Box>
+                    ))}
+                  </Stack>
+                </Box>
+              )}
 
               {/* Collapsible Commands */}
               {assistant.commands && assistant.commands.length > 0 && (
@@ -192,6 +250,8 @@ interface AgentEditorProps {
   messages?: Message[]
   commandQueue?: string[]
   currentCommandIndex?: number
+  mode?: 'query' | 'analysis'
+  onModeChange?: (mode: 'query' | 'analysis') => void
 }
 
 export function AgentEditor({
@@ -205,6 +265,8 @@ export function AgentEditor({
   messages = [],
   commandQueue = [],
   currentCommandIndex = 0,
+  mode = 'query',
+  onModeChange,
 }: AgentEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [queueExpanded, setQueueExpanded] = useState(false)
@@ -293,40 +355,62 @@ export function AgentEditor({
             WebkitBackdropFilter: 'blur(10px)',
           }}
         >
-          <Group justify="space-between" align="center">
-            <Group gap="xs">
-              <IconSparkles
-                size={20}
-                style={{ color: 'var(--mantine-color-blue-6)' }}
-              />
-              <Text fw={600} size="sm">
-                AI Agent
-              </Text>
-              {commandQueue.length > 0 && (
-                <Badge
-                  size="xs"
-                  variant="light"
-                  color="blue"
-                  style={{ fontWeight: 500 }}
+          <Stack gap="xs">
+            <Group justify="space-between" align="center">
+              <Group gap="xs">
+                <IconSparkles
+                  size={20}
+                  style={{ color: 'var(--mantine-color-blue-6)' }}
+                />
+                <Text fw={600} size="sm">
+                  AI Agent
+                </Text>
+                {commandQueue.length > 0 && (
+                  <Badge
+                    size="xs"
+                    variant="light"
+                    color="blue"
+                    style={{ fontWeight: 500 }}
+                  >
+                    {currentCommandIndex + 1} / {commandQueue.length}
+                  </Badge>
+                )}
+              </Group>
+              {remainingCommands.length > 0 && (
+                <ActionIcon
+                  variant="subtle"
+                  size="sm"
+                  onClick={() => setQueueExpanded(!queueExpanded)}
                 >
-                  {currentCommandIndex + 1} / {commandQueue.length}
-                </Badge>
+                  {queueExpanded ? (
+                    <IconChevronUp size={16} />
+                  ) : (
+                    <IconChevronDown size={16} />
+                  )}
+                </ActionIcon>
               )}
             </Group>
-            {remainingCommands.length > 0 && (
-              <ActionIcon
-                variant="subtle"
-                size="sm"
-                onClick={() => setQueueExpanded(!queueExpanded)}
-              >
-                {queueExpanded ? (
-                  <IconChevronUp size={16} />
-                ) : (
-                  <IconChevronDown size={16} />
-                )}
-              </ActionIcon>
+            {onModeChange && (
+              <SegmentedControl
+                value={mode}
+                onChange={(value) =>
+                  onModeChange(value as 'query' | 'analysis')
+                }
+                data={[
+                  {
+                    value: 'query',
+                    label: 'Query Agent',
+                  },
+                  {
+                    value: 'analysis',
+                    label: 'Analysis Agent',
+                  },
+                ]}
+                size="xs"
+                fullWidth
+              />
             )}
-          </Group>
+          </Stack>
         </Box>
 
         {/* Command Queue Status */}

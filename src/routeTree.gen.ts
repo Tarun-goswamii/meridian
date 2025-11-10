@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthedRouteRouteImport } from './routes/_authed/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthedDashboardRouteImport } from './routes/_authed/dashboard'
+import { Route as ApiDuckdbQueryRouteImport } from './routes/api/duckdb/query'
 import { Route as AuthedTableTableRouteImport } from './routes/_authed/table.$table'
 
 const AuthedRouteRoute = AuthedRouteRouteImport.update({
@@ -28,6 +29,11 @@ const AuthedDashboardRoute = AuthedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthedRouteRoute,
 } as any)
+const ApiDuckdbQueryRoute = ApiDuckdbQueryRouteImport.update({
+  id: '/api/duckdb/query',
+  path: '/api/duckdb/query',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthedTableTableRoute = AuthedTableTableRouteImport.update({
   id: '/table/$table',
   path: '/table/$table',
@@ -38,11 +44,13 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dashboard': typeof AuthedDashboardRoute
   '/table/$table': typeof AuthedTableTableRoute
+  '/api/duckdb/query': typeof ApiDuckdbQueryRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dashboard': typeof AuthedDashboardRoute
   '/table/$table': typeof AuthedTableTableRoute
+  '/api/duckdb/query': typeof ApiDuckdbQueryRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -50,23 +58,26 @@ export interface FileRoutesById {
   '/_authed': typeof AuthedRouteRouteWithChildren
   '/_authed/dashboard': typeof AuthedDashboardRoute
   '/_authed/table/$table': typeof AuthedTableTableRoute
+  '/api/duckdb/query': typeof ApiDuckdbQueryRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/dashboard' | '/table/$table'
+  fullPaths: '/' | '/dashboard' | '/table/$table' | '/api/duckdb/query'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/dashboard' | '/table/$table'
+  to: '/' | '/dashboard' | '/table/$table' | '/api/duckdb/query'
   id:
     | '__root__'
     | '/'
     | '/_authed'
     | '/_authed/dashboard'
     | '/_authed/table/$table'
+    | '/api/duckdb/query'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthedRouteRoute: typeof AuthedRouteRouteWithChildren
+  ApiDuckdbQueryRoute: typeof ApiDuckdbQueryRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -91,6 +102,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/dashboard'
       preLoaderRoute: typeof AuthedDashboardRouteImport
       parentRoute: typeof AuthedRouteRoute
+    }
+    '/api/duckdb/query': {
+      id: '/api/duckdb/query'
+      path: '/api/duckdb/query'
+      fullPath: '/api/duckdb/query'
+      preLoaderRoute: typeof ApiDuckdbQueryRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_authed/table/$table': {
       id: '/_authed/table/$table'
@@ -119,6 +137,7 @@ const AuthedRouteRouteWithChildren = AuthedRouteRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthedRouteRoute: AuthedRouteRouteWithChildren,
+  ApiDuckdbQueryRoute: ApiDuckdbQueryRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

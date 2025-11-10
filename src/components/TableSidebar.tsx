@@ -22,9 +22,13 @@ interface TableSidebarProps {
     role: 'user' | 'assistant'
     content: string
     commands?: string[]
+    toolSteps?: Array<{ tool: string; args: any; result?: any }>
+    mode?: 'query' | 'analysis'
   }>
   commandQueue: string[]
   currentCommandIndex: number
+  agentMode?: 'query' | 'analysis'
+  onAgentModeChange?: (mode: 'query' | 'analysis') => void
   // Insights props
   isGeneratingInsights: boolean
   onGenerateInsights: () => void
@@ -50,6 +54,8 @@ export function TableSidebar({
   messages,
   commandQueue,
   currentCommandIndex,
+  agentMode,
+  onAgentModeChange,
   isGeneratingInsights,
   onGenerateInsights,
   onRefreshInsights,
@@ -155,6 +161,8 @@ export function TableSidebar({
             messages={messages}
             commandQueue={commandQueue}
             currentCommandIndex={currentCommandIndex}
+            mode={agentMode}
+            onModeChange={onAgentModeChange}
           />
         ) : activePanel === 'insights' ? (
           <InsightsPanel

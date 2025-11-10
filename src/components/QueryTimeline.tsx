@@ -1,3 +1,4 @@
+// TASK: Use gitgraph
 import { useQuery } from 'convex/react'
 import { api } from '@/convex/_generated/api'
 import {
@@ -8,7 +9,6 @@ import {
   Group,
   Badge,
   Tooltip,
-  Divider,
   Paper,
   Loader,
   ThemeIcon,
@@ -298,7 +298,6 @@ export function QueryTimeline({
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
-        background: '#f8fafc',
         borderRadius: 12,
       }}
     >

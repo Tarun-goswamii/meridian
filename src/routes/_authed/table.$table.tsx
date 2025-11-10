@@ -61,8 +61,15 @@ function RouteComponent() {
     undefined,
   )
   const [threadId, setThreadId] = useState<string | undefined>(undefined)
+  const [agentMode, setAgentMode] = useState<'query' | 'analysis'>('query')
   const [messages, setMessages] = useState<
-    Array<{ role: 'user' | 'assistant'; content: string; commands?: string[] }>
+    Array<{
+      role: 'user' | 'assistant'
+      content: string
+      commands?: string[]
+      toolSteps?: Array<{ tool: string; args: any; result?: any }>
+      mode?: 'query' | 'analysis'
+    }>
   >([])
 
   // Command queue state
@@ -262,22 +269,39 @@ function RouteComponent() {
     try {
       const sampleRows = data.rows.slice(0, 3)
 
+      // Get the server URL (for tools to call back)
+      const serverUrl = window.location.origin
+
       const response = await askGemini({
         prompt: agentInput,
         tableName: table,
         columns: data.columns,
         sampleRows: sampleRows,
         threadId: threadId,
+        mode: agentMode,
+        serverUrl: serverUrl,
       })
 
-      // Set up command queue
-      if (response.commands && response.commands.length > 0) {
+      // Set up command queue (only for query mode)
+      if (
+        response.mode === 'query' &&
+        response.commands &&
+        response.commands.length > 0
+      ) {
         setCommandQueue(response.commands)
         setCurrentCommandIndex(0)
         setQuery(response.commands[0])
+      } else {
+        // Clear command queue for analysis mode
+        setCommandQueue([])
+        setCurrentCommandIndex(0)
       }
 
-      setAgentDescription(response.description)
+      setAgentDescription(
+        response.mode === 'query'
+          ? response.description
+          : response.text?.substring(0, 200),
+      )
       setThreadId(response.threadId)
 
       setMessages((prev) => [
@@ -285,8 +309,13 @@ function RouteComponent() {
         { role: 'user', content: agentInput },
         {
           role: 'assistant',
-          content: response.description,
+          content:
+            response.mode === 'query'
+              ? response.description
+              : response.text || response.description || '',
           commands: response.commands || [],
+          toolSteps: response.toolSteps || [],
+          mode: response.mode,
         },
       ])
 
@@ -406,6 +435,7 @@ function RouteComponent() {
               overflow: 'hidden',
             }}
           >
+            <FacePile presenceState={presenceState ?? []} />
             <TableHeader
               tableName={table}
               columnCount={data.columns.length}
@@ -479,6 +509,8 @@ function RouteComponent() {
           messages={messages}
           commandQueue={commandQueue}
           currentCommandIndex={currentCommandIndex}
+          agentMode={agentMode}
+          onAgentModeChange={setAgentMode}
           isGeneratingInsights={isGeneratingInsights}
           onGenerateInsights={handleGenerateInsights}
           onRefreshInsights={handleRefreshInsights}
@@ -499,8 +531,6 @@ function RouteComponent() {
             backgroundColor: 'transparent',
           }}
         >
-          <FacePile presenceState={presenceState ?? []} />
-
           <Box style={{ maxWidth: 1400, margin: '0 auto' }}>
             <QueryEditor
               query={query}
