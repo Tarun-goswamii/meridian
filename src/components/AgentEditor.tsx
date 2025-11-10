@@ -273,7 +273,6 @@ export function AgentEditor({
 
   const remainingCommands = commandQueue.slice(currentCommandIndex + 1)
 
-
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (
