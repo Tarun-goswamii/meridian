@@ -273,40 +273,6 @@ export function AgentEditor({
 
   const remainingCommands = commandQueue.slice(currentCommandIndex + 1)
 
-  // Auto-resize textarea
-  useEffect(() => {
-    const textarea = textareaRef.current
-    if (!textarea) return
-
-    const adjustHeight = () => {
-      textarea.style.height = 'auto'
-      const scrollHeight = textarea.scrollHeight
-      const minHeight = 60 // ~3 lines
-      const maxHeight = 240 // ~10 lines
-      const newHeight = Math.min(Math.max(scrollHeight, minHeight), maxHeight)
-      textarea.style.height = `${newHeight}px`
-      textarea.style.overflowY = scrollHeight > maxHeight ? 'auto' : 'hidden'
-    }
-
-    // Adjust on input change
-    adjustHeight()
-
-    // Also adjust on any content changes
-    const observer = new MutationObserver(adjustHeight)
-    observer.observe(textarea, {
-      childList: true,
-      subtree: true,
-      characterData: true,
-    })
-
-    // Adjust when window resizes
-    window.addEventListener('resize', adjustHeight)
-
-    return () => {
-      observer.disconnect()
-      window.removeEventListener('resize', adjustHeight)
-    }
-  }, [input])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {

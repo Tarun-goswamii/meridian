@@ -8,7 +8,7 @@ import { queryDuckDB } from '~/utils/duckdb'
 import { useAction, useMutation } from 'convex/react'
 import { api } from '@/convex/_generated/api'
 import { useReactTable, getCoreRowModel } from '@tanstack/react-table'
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState } from 'react'
 import { Text, Group, Box, Divider } from '@mantine/core'
 import { QueryEditor } from '~/components/QueryEditor'
 import type { Insight } from '~/components/InsightsPanel'
@@ -353,26 +353,25 @@ function RouteComponent() {
   }, [data.columns])
 
   // Automatically generate statistical findings when data changes (including on mount)
-  useEffect(() => {
-    const generateStatisticalFindings = async () => {
-      if (data && data.rows.length > 0 && data.columns.length > 0) {
-        try {
-          const statisticalAnalyses = await analyzeTableWithDuckDB(
-            table,
-            query,
-            data.columns,
-          )
-          setStatisticalFindings(statisticalAnalyses)
-        } catch (err) {
-          console.error('Error generating statistical findings:', err)
-          // Don't set error state, just fail silently for auto-generation
-        }
+
+  const generateStatisticalFindings = async () => {
+    if (data && data.rows.length > 0 && data.columns.length > 0) {
+      try {
+        const statisticalAnalyses = await analyzeTableWithDuckDB(
+          table,
+          'SELECT * FROM ' + table,
+          data.columns,
+        )
+        setStatisticalFindings(statisticalAnalyses)
+      } catch (err) {
+        console.error('Error generating statistical findings:', err)
+        // Don't set error state, just fail silently for auto-generation
       }
     }
+  }
 
-    generateStatisticalFindings()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, query, table])
+  generateStatisticalFindings()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
 
   // Filter visible columns based on columnVisibility
   const visibleColumns = useMemo(() => {

@@ -1,4 +1,4 @@
-import { components } from './_generated/api'
+import { api, components } from './_generated/api'
 import { Agent, createTool } from '@convex-dev/agent'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { action } from './_generated/server'
@@ -26,17 +26,38 @@ function trimToLimit(str: string, limit = GEMINI_PROMPT_LIMIT) {
   )
 }
 
-// Get the server URL from environment or use a default
-const getServerUrl = () => {
-  // In production, this should be set as an environment variable
-  // For now, we'll use a placeholder that the frontend will need to provide
-  const url = process.env.DUCKDB_SERVER_URL || 'http://localhost:3000'
-  console.log('[getServerUrl] Using DUCKDB_SERVER_URL:', url)
-  return url
-}
+// Action to fetch DuckDB query results
+export const fetchDuckDBQuery = action({
+  args: { query: v.string() },
+  handler: async (ctx, { query }) => {
+    const serverUrl =
+      process.env.DUCKDB_SERVER_URL || 'https://169d9edabf2c.ngrok-free.app'
+    console.log('[fetchDuckDBQuery] About to fetch', {
+      url: `${serverUrl}/api/duckdb/query`,
+      query,
+    })
+
+    const response = await fetch(`${serverUrl}/api/duckdb/query`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query }),
+    })
+
+    console.log('[fetchDuckDBQuery] Fetch response status:', response.status)
+    if (!response.ok) {
+      const text = await response.text().catch(() => '')
+      console.error('[fetchDuckDBQuery] HTTP error', response.status, text)
+      throw new Error(`HTTP error! status: ${response.status} body: ${text}`)
+    }
+
+    const result = await response.json()
+    console.log('[fetchDuckDBQuery] Result:', result)
+    return result
+  },
+})
 
 // Tool to query DuckDB
-const queryDuckDB = createTool({
+const queryDuckDB: any = createTool({
   description:
     'Execute a SQL query on DuckDB and return the results. Use this to read data from tables, columns, or specific entries. Returns columns, rows, and metadata.',
   args: z.object({
@@ -48,26 +69,9 @@ const queryDuckDB = createTool({
   }),
   handler: async (ctx, args) => {
     try {
-      const serverUrl = getServerUrl()
-      console.log('[queryDuckDB] About to fetch', {
-        url: `${serverUrl}/api/duckdb/query`,
+      const result = await ctx.runAction(api.table_agent.fetchDuckDBQuery, {
         query: args.query,
       })
-      const response = await fetch(`${serverUrl}/api/duckdb/query`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: args.query }),
-      })
-
-      console.log('[queryDuckDB] Fetch response status:', response.status)
-      if (!response.ok) {
-        const text = await response.text().catch(() => '')
-        console.error('[queryDuckDB] HTTP error', response.status, text)
-        throw new Error(`HTTP error! status: ${response.status} body: ${text}`)
-      }
-
-      const result = await response.json()
-      console.log('[queryDuckDB] Result:', result)
       return {
         success: true,
         columns: result.columns || [],
@@ -87,7 +91,7 @@ const queryDuckDB = createTool({
 })
 
 // Tool to get table schema
-const getTableSchema = createTool({
+const getTableSchema: any = createTool({
   description:
     'Get the schema (column names and types) of a table. Use this to understand what columns are available in a table.',
   args: z.object({
@@ -95,30 +99,11 @@ const getTableSchema = createTool({
   }),
   handler: async (ctx, args) => {
     try {
-      const serverUrl = getServerUrl()
       const query = `DESCRIBE ${args.tableName}`
-      console.log('[getTableSchema] About to fetch', {
-        url: `${serverUrl}/api/duckdb/query`,
+      console.log('[getTableSchema] About to fetch schema for:', args.tableName)
+      const result = await ctx.runAction(api.table_agent.fetchDuckDBQuery, {
         query,
       })
-      console.log('FETCHING NOW.')
-      const response = await fetch(`${serverUrl}/api/duckdb/query`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query }),
-      })
-      console.log('FETCH OVER.')
-
-      console.log('[getTableSchema] FULL RESPONSE:', response)
-      console.log('[getTableSchema] Fetch response status:', response.status)
-
-      if (!response.ok) {
-        const text = await response.text().catch(() => '')
-        console.error('[getTableSchema] HTTP error', response.status, text)
-        throw new Error(`HTTP error! status: ${response.status} body: ${text}`)
-      }
-
-      const result = await response.json()
       console.log('[getTableSchema] Result:', result)
       return {
         success: true,
@@ -138,7 +123,7 @@ const getTableSchema = createTool({
 })
 
 // Tool to get sample rows from a table
-const getSampleRows = createTool({
+const getSampleRows: any = createTool({
   description:
     'Get a sample of rows from a table. Use this to see example data and understand the structure of the table.',
   args: z.object({
@@ -151,27 +136,15 @@ const getSampleRows = createTool({
   }),
   handler: async (ctx, args) => {
     try {
-      const serverUrl = getServerUrl()
       const limit = Math.min(Math.max(args.limit || 10, 1), 100)
       const query = `SELECT * FROM ${args.tableName} LIMIT ${limit}`
-      console.log('[getSampleRows] About to fetch', {
-        url: `${serverUrl}/api/duckdb/query`,
+      console.log(
+        '[getSampleRows] About to fetch sample rows for:',
+        args.tableName,
+      )
+      const result = await ctx.runAction(api.table_agent.fetchDuckDBQuery, {
         query,
       })
-      const response = await fetch(`${serverUrl}/api/duckdb/query`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query }),
-      })
-
-      console.log('[getSampleRows] Fetch response status:', response.status)
-      if (!response.ok) {
-        const text = await response.text().catch(() => '')
-        console.error('[getSampleRows] HTTP error', response.status, text)
-        throw new Error(`HTTP error! status: ${response.status} body: ${text}`)
-      }
-
-      const result = await response.json()
       console.log('[getSampleRows] Result:', result)
       return {
         success: true,

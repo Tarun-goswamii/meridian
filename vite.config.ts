@@ -7,6 +7,9 @@ import viteReact from '@vitejs/plugin-react'
 export default defineConfig({
   server: {
     port: 3000,
+    host: true,
+    // Allow specific hosts, including '169d9edabf2c.ngrok-free.app'
+    allowedHosts: ['localhost', '127.0.0.1', '169d9edabf2c.ngrok-free.app'],
   },
   plugins: [
     tailwindcss(),
