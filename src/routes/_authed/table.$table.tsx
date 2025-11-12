@@ -5,10 +5,10 @@ import {
 } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 import { queryDuckDB } from '~/utils/duckdb'
-import { useAction, useMutation } from 'convex/react'
+import { useAction, useMutation, useQuery } from 'convex/react'
 import { api } from '@/convex/_generated/api'
 import { useReactTable, getCoreRowModel } from '@tanstack/react-table'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Text, Group, Box, Divider } from '@mantine/core'
 import { QueryEditor } from '~/components/QueryEditor'
 import type { Insight } from '~/components/InsightsPanel'
@@ -60,17 +60,10 @@ function RouteComponent() {
   const [agentDescription, setAgentDescription] = useState<string | undefined>(
     undefined,
   )
-  const [threadId, setThreadId] = useState<string | undefined>(undefined)
+  const [selectedThreadId, setSelectedThreadId] = useState<string | undefined>(
+    undefined,
+  )
   const [agentMode, setAgentMode] = useState<'query' | 'analysis'>('query')
-  const [messages, setMessages] = useState<
-    Array<{
-      role: 'user' | 'assistant'
-      content: string
-      commands?: string[]
-      toolSteps?: Array<{ tool: string; args: any; result?: any }>
-      mode?: 'query' | 'analysis'
-    }>
-  >([])
 
   // Command queue state
   const [commandQueue, setCommandQueue] = useState<string[]>([])
@@ -102,6 +95,70 @@ function RouteComponent() {
   const askGemini = useAction(api.table_agent.askGemini)
   const generateInsights = useAction(api.insights.generateInsights)
   const logQuery = useMutation(api.queryLog.logQuery)
+  const threads = useQuery(api.table_agent.listAgentThreads, {
+    tableName: table,
+  })
+  const hasInitialisedThreadSelection = useRef(false)
+  const threadMessages = useQuery(
+    api.table_agent.getAgentThreadMessages,
+    selectedThreadId
+      ? { agentThreadId: selectedThreadId }
+      : ('skip' as any),
+  )
+  const agentMessages = threadMessages?.messages ?? []
+  const threadsList = threads ?? []
+  const selectedThread = selectedThreadId
+    ? threadsList.find((thread) => thread.agentThreadId === selectedThreadId)
+    : undefined
+  const previousSelectedThreadId = useRef<string | undefined>(undefined)
+
+  useEffect(() => {
+    if (hasInitialisedThreadSelection.current) return
+    if (threads && threads.length > 0) {
+      setSelectedThreadId((prev) => prev ?? threads[0].agentThreadId)
+      hasInitialisedThreadSelection.current = true
+    }
+  }, [threads])
+
+  useEffect(() => {
+    if (selectedThreadId === undefined) {
+      previousSelectedThreadId.current = undefined
+      return
+    }
+    if (selectedThreadId === previousSelectedThreadId.current) {
+      return
+    }
+    previousSelectedThreadId.current = selectedThreadId
+    if (selectedThread?.lastMode && selectedThread.lastMode !== agentMode) {
+      setAgentMode(selectedThread.lastMode)
+    }
+    if (selectedThread?.lastMessageSummary) {
+      setAgentDescription(selectedThread.lastMessageSummary)
+    }
+  }, [selectedThreadId, selectedThread, agentMode])
+
+  useEffect(() => {
+    if (!selectedThreadId) {
+      return
+    }
+    if (!threadMessages) {
+      return
+    }
+    const assistantMessages =
+      threadMessages.messages?.filter((msg) => msg.role === 'assistant') ?? []
+    if (assistantMessages.length === 0) {
+      setAgentDescription(undefined)
+      return
+    }
+    const latest = assistantMessages[assistantMessages.length - 1]
+    const latestDescription =
+      (latest.description && latest.description.trim().length > 0
+        ? latest.description
+        : latest.content) || undefined
+    if (latestDescription) {
+      setAgentDescription(latestDescription)
+    }
+  }, [selectedThreadId, threadMessages])
 
   const handleExecuteQuery = async () => {
     setIsExecuting(true)
@@ -261,6 +318,37 @@ function RouteComponent() {
     setInsightsError(null)
   }
 
+  const handleSelectThread = (nextThreadId?: string) => {
+    setSelectedThreadId(nextThreadId)
+    setCommandQueue([])
+    setCurrentCommandIndex(0)
+    if (!nextThreadId) {
+      setAgentMode('query')
+      setAgentDescription(undefined)
+      return
+    }
+    const matchingThread = threadsList.find(
+      (thread) => thread.agentThreadId === nextThreadId,
+    )
+    if (matchingThread?.lastMode && matchingThread.lastMode !== agentMode) {
+      setAgentMode(matchingThread.lastMode)
+    }
+    if (matchingThread?.lastMessageSummary) {
+      setAgentDescription(matchingThread.lastMessageSummary)
+    } else {
+      setAgentDescription(undefined)
+    }
+  }
+
+  const handleCreateNewThread = () => {
+    setSelectedThreadId(undefined)
+    setAgentInput('')
+    setAgentDescription(undefined)
+    setCommandQueue([])
+    setCurrentCommandIndex(0)
+    setAgentMode('query')
+  }
+
   const handleAgentAction = async () => {
     if (!agentInput.trim()) return
 
@@ -277,7 +365,7 @@ function RouteComponent() {
         tableName: table,
         columns: data.columns,
         sampleRows: sampleRows,
-        threadId: threadId,
+        threadId: selectedThreadId,
         mode: agentMode,
         serverUrl: serverUrl,
       })
@@ -302,22 +390,7 @@ function RouteComponent() {
           ? response.description
           : response.text?.substring(0, 200),
       )
-      setThreadId(response.threadId)
-
-      setMessages((prev) => [
-        ...prev,
-        { role: 'user', content: agentInput },
-        {
-          role: 'assistant',
-          content:
-            response.mode === 'query'
-              ? response.description
-              : response.text || response.description || '',
-          commands: response.commands || [],
-          toolSteps: response.toolSteps || [],
-          mode: response.mode,
-        },
-      ])
+      setSelectedThreadId(response.threadId)
 
       setAgentInput('')
     } catch (err) {
@@ -505,7 +578,11 @@ function RouteComponent() {
           onAgentErrorClose={() => setAgentError(null)}
           isAgentExecuting={isAgentExecuting}
           agentDescription={agentDescription}
-          messages={messages}
+          threads={threadsList}
+          selectedThreadId={selectedThreadId}
+          onThreadSelect={handleSelectThread}
+          onCreateThread={handleCreateNewThread}
+          messages={agentMessages}
           commandQueue={commandQueue}
           currentCommandIndex={currentCommandIndex}
           agentMode={agentMode}

@@ -57,4 +57,43 @@ export default defineSchema({
   })
     .index('by_userId', ['userId'])
     .index('by_sequenceNumber', ['sequenceNumber']),
+  agentThreads: defineTable({
+    userId: v.string(),
+    tableName: v.string(),
+    agentThreadId: v.string(),
+    agentName: v.string(),
+    title: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    lastMessageAt: v.number(),
+    lastMessageSummary: v.optional(v.string()),
+    lastMode: v.optional(v.union(v.literal('query'), v.literal('analysis'))),
+  })
+    .index('by_agentThreadId', ['agentThreadId'])
+    .index('by_user_table', ['userId', 'tableName'])
+    .index('by_user_table_lastMessageAt', [
+      'userId',
+      'tableName',
+      'lastMessageAt',
+    ]),
+  agentMessages: defineTable({
+    threadId: v.id('agentThreads'),
+    role: v.union(v.literal('user'), v.literal('assistant')),
+    userId: v.optional(v.string()),
+    agentName: v.optional(v.string()),
+    mode: v.union(v.literal('query'), v.literal('analysis')),
+    content: v.string(),
+    description: v.optional(v.string()),
+    commands: v.optional(v.array(v.string())),
+    toolSteps: v.optional(
+      v.array(
+        v.object({
+          tool: v.string(),
+          args: v.any(),
+          result: v.any(),
+        }),
+      ),
+    ),
+    createdAt: v.number(),
+  }).index('by_thread', ['threadId']),
 })

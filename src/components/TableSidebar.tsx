@@ -18,12 +18,26 @@ interface TableSidebarProps {
   onAgentErrorClose: () => void
   isAgentExecuting: boolean
   agentDescription: string | undefined
+  threads?: Array<{
+    agentThreadId: string
+    title?: string | null
+    lastMessageSummary?: string | null
+    lastMessageAt: number
+    lastMode?: 'query' | 'analysis'
+    agentName?: string | null
+  }>
+  selectedThreadId?: string
+  onThreadSelect?: (threadId?: string) => void
+  onCreateThread?: () => void
   messages: Array<{
     role: 'user' | 'assistant'
     content: string
+    description?: string
     commands?: string[]
     toolSteps?: Array<{ tool: string; args: any; result?: any }>
     mode?: 'query' | 'analysis'
+    agentName?: string
+    createdAt?: number
   }>
   commandQueue: string[]
   currentCommandIndex: number
@@ -51,6 +65,10 @@ export function TableSidebar({
   onAgentErrorClose,
   isAgentExecuting,
   agentDescription,
+  threads = [],
+  selectedThreadId,
+  onThreadSelect,
+  onCreateThread,
   messages,
   commandQueue,
   currentCommandIndex,
@@ -158,6 +176,10 @@ export function TableSidebar({
             onErrorClose={onAgentErrorClose}
             isExecuting={isAgentExecuting}
             description={agentDescription}
+            threads={threads}
+            selectedThreadId={selectedThreadId}
+            onThreadSelect={onThreadSelect}
+            onCreateThread={onCreateThread}
             messages={messages}
             commandQueue={commandQueue}
             currentCommandIndex={currentCommandIndex}

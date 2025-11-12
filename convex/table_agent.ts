@@ -2,7 +2,7 @@
 import { api, components } from './_generated/api'
 import { Agent, createTool } from '@convex-dev/agent'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
-import { action } from './_generated/server'
+import { action, mutation, query } from './_generated/server'
 import { v } from 'convex/values'
 import { checkAuth } from './authFns'
 import { z } from 'zod'
@@ -25,6 +25,22 @@ function trimToLimit(str: string, limit = GEMINI_PROMPT_LIMIT) {
     '\n\n... [TRUNCATED FOR LENGTH] ...\n\n' +
     str.slice(str.length - keep - 200)
   )
+}
+
+function createThreadTitle(prompt: string) {
+  const cleaned = prompt
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join(' ')
+  const title = cleaned.slice(0, 120)
+  return title || 'New conversation'
+}
+
+function summarizeText(text: string, limit = 200) {
+  if (!text) return ''
+  if (text.length <= limit) return text
+  return text.slice(0, limit).trimEnd() + '...'
 }
 
 // Action to fetch DuckDB query results
@@ -180,10 +196,11 @@ When a user asks a question:
 1. Use the available tools to explore the database and gather information
 2. Analyze the data you retrieve
 3. Provide a clear, helpful answer based on your findings
-4. Explain what data you looked at to arrive at your answer
+4. Be super concise, and don't explain anything about how you got to your analysis
 
 Be thorough but efficient. Use tools strategically to gather the information needed to answer the user's question.
 `,
+  // 4. Explain what data you looked at to arrive at your answer
   maxSteps: 10,
   tools: {
     queryDuckDB,
@@ -219,13 +236,88 @@ export const askGemini = action({
     }
 
     const agent = mode === 'query' ? query_agent : analysis_agent
+    const agentName = mode === 'query' ? 'Query Agent' : 'Analysis Agent'
+    const tableAgentApi = api.table_agent as any
+    const now = Date.now()
 
-    let thread
-    if (threadId) {
-      thread = { threadId }
-    } else {
-      thread = await agent.createThread(ctx, { userId: user_id })
+    let threadDoc: any =
+      threadId != null
+        ? await ctx.runQuery(tableAgentApi.getAgentThreadByExternalId, {
+            agentThreadId: threadId,
+          })
+        : null
+
+    if (threadId && (!threadDoc || threadDoc.userId !== user_id)) {
+      throw new Error('Thread not found or access denied')
     }
+
+    if (threadDoc && threadDoc.tableName !== tableName) {
+      throw new Error('Thread does not belong to this table')
+    }
+
+    let agentThreadId = threadDoc?.agentThreadId ?? null
+    let threadReference: { threadId: string } | null = threadDoc
+      ? { threadId: threadDoc.agentThreadId }
+      : null
+
+    if (!agentThreadId) {
+      const createdThread: any = await agent.createThread(ctx, {
+        userId: user_id,
+      })
+      agentThreadId = createdThread.threadId
+      threadReference = { threadId: createdThread.threadId }
+      const createdDoc = await ctx.runMutation(
+        tableAgentApi.createAgentThreadRecord,
+        {
+          userId: user_id,
+          tableName,
+          agentThreadId,
+          agentName,
+          title: createThreadTitle(prompt),
+          createdAt: now,
+          lastMode: mode,
+        },
+      )
+      if (!createdDoc) {
+        throw new Error('Failed to persist agent thread')
+      }
+      threadDoc = createdDoc
+    } else if (threadDoc) {
+      await ctx.runMutation(tableAgentApi.updateAgentThreadRecord, {
+        threadId: threadDoc._id,
+        agentName,
+        lastMode: mode,
+        updatedAt: now,
+      })
+      threadDoc = {
+        ...threadDoc,
+        agentName,
+        lastMode: mode,
+        updatedAt: now,
+      }
+    }
+
+    if (!threadDoc || !agentThreadId || !threadReference) {
+      throw new Error('Unable to initialise agent thread')
+    }
+
+    if (!threadDoc.title) {
+      const title = createThreadTitle(prompt)
+      await ctx.runMutation(tableAgentApi.updateAgentThreadRecord, {
+        threadId: threadDoc._id,
+        title,
+      })
+      threadDoc = { ...threadDoc, title }
+    }
+
+    await ctx.runMutation(tableAgentApi.insertAgentMessageRecord, {
+      threadId: threadDoc._id,
+      role: 'user',
+      userId: user_id,
+      mode,
+      content: prompt,
+      createdAt: now,
+    })
 
     if (mode === 'query') {
       // Query mode: generate SQL queries
@@ -234,7 +326,11 @@ export const askGemini = action({
         .join(', ')
       const sampleData =
         sampleRows && sampleRows.length > 0
-          ? `\n\nSample data (first ${sampleRows.length} rows):\n${JSON.stringify(sampleRows, null, 2)}`
+          ? `\n\nSample data (first ${sampleRows.length} rows):\n${JSON.stringify(
+              sampleRows,
+              null,
+              2,
+            )}`
           : ''
 
       let contextualPrompt = `
@@ -250,47 +346,91 @@ Please write a DuckDB SQL queries for the table "${tableName}" based on the user
       // Ensure Gemini prompt does not exceed limit
       contextualPrompt = trimToLimit(contextualPrompt, GEMINI_PROMPT_LIMIT)
 
-      const res = await agent.generateObject(
-        ctx,
-        { threadId: thread.threadId },
-        {
-          prompt: contextualPrompt,
-          schema: z.object({
-            commands: z
-              .array(
-                z
-                  .string()
-                  .describe(
-                    'The query / command to execute on the duck db; Should always be valid Duck DB SQL code',
-                  ),
-              )
-              .min(1)
-              .max(10),
-            description: z
-              .string()
-              .describe('A description of what the query does; Max 50 words'),
-          }),
-        },
-      )
+      const res: any = await agent.generateObject(ctx, threadReference, {
+        prompt: contextualPrompt,
+        schema: z.object({
+          commands: z
+            .array(
+              z
+                .string()
+                .describe(
+                  'The query / command to execute on the duck db Should always be valid Duck DB SQL code',
+                ),
+            )
+            .min(1)
+            .max(10),
+          description: z
+            .string()
+            .describe('A description of what the query does Max 50 words'),
+        }),
+      })
 
       try {
         if (!res.object.commands || !res.object.description) {
           throw new Error('Invalid response format from agent')
         }
 
+        const assistantCreatedAt = Date.now()
+        const assistantSummary = summarizeText(res.object.description)
+
+        await ctx.runMutation(tableAgentApi.insertAgentMessageRecord, {
+          threadId: threadDoc._id,
+          role: 'assistant',
+          agentName,
+          mode,
+          content: res.object.description,
+          description: res.object.description,
+          commands: res.object.commands,
+          createdAt: assistantCreatedAt,
+        })
+
+        await ctx.runMutation(tableAgentApi.updateAgentThreadRecord, {
+          threadId: threadDoc._id,
+          agentName,
+          lastMode: mode,
+          updatedAt: assistantCreatedAt,
+          lastMessageAt: assistantCreatedAt,
+          lastMessageSummary: assistantSummary,
+        })
+
         return {
           mode: 'query' as const,
           commands: res.object.commands,
           description: res.object.description,
-          threadId: thread.threadId,
+          threadId: agentThreadId,
           toolSteps: [], // Query mode doesn't use tools
         }
       } catch (error) {
+        const assistantCreatedAt = Date.now()
+        const errorMessage =
+          'Error: Agent returned invalid response format' +
+          (error instanceof Error ? ` (${error.message})` : '')
+
+        await ctx.runMutation(tableAgentApi.insertAgentMessageRecord, {
+          threadId: threadDoc._id,
+          role: 'assistant',
+          agentName,
+          mode,
+          content: errorMessage,
+          description: errorMessage,
+          commands: [],
+          createdAt: assistantCreatedAt,
+        })
+
+        await ctx.runMutation(tableAgentApi.updateAgentThreadRecord, {
+          threadId: threadDoc._id,
+          agentName,
+          lastMode: mode,
+          updatedAt: assistantCreatedAt,
+          lastMessageAt: assistantCreatedAt,
+          lastMessageSummary: summarizeText(errorMessage),
+        })
+
         return {
           mode: 'query' as const,
           commands: [],
           description: 'Error: Agent returned invalid response format',
-          threadId: thread.threadId,
+          threadId: agentThreadId,
           toolSteps: [],
         }
       }
@@ -306,18 +446,16 @@ TABLE CONTEXT:
 USER REQUEST:
 ${prompt}
 
-Use the available tools to explore the database and provide a helpful answer. Show what data you examined.`
+Use the available tools to explore the database and provide a helpful answer.`
 
       // Ensure Gemini prompt does not exceed limit
       contextualPrompt = trimToLimit(contextualPrompt, GEMINI_PROMPT_LIMIT)
 
-      const res = await agent.generateText(
-        ctx,
-        { threadId: thread.threadId },
-        {
-          prompt: contextualPrompt,
-        },
-      )
+      const res: any = await agent.generateText(ctx, threadReference, {
+        prompt: contextualPrompt,
+      })
+
+      const assistantText = res.text ?? ''
 
       // Extract tool steps from thread messages
       const toolSteps: Array<{
@@ -331,7 +469,7 @@ Use the available tools to explore the database and provide a helpful answer. Sh
         const messages = await ctx.runQuery(
           components.agent.messages.listMessagesByThreadId,
           {
-            threadId: thread.threadId,
+            threadId: threadReference.threadId,
             order: 'asc',
             paginationOpts: { cursor: null, numItems: 100 },
           },
@@ -405,14 +543,228 @@ Use the available tools to explore the database and provide a helpful answer. Sh
         // Continue without tool steps if extraction fails
       }
 
+      const assistantCreatedAt = Date.now()
+      const assistantSummary = summarizeText(assistantText)
+
+      await ctx.runMutation(tableAgentApi.insertAgentMessageRecord, {
+        threadId: threadDoc._id,
+        role: 'assistant',
+        agentName,
+        mode,
+        content: assistantText,
+        description: assistantSummary,
+        commands: [],
+        toolSteps: toolSteps.length > 0 ? toolSteps : undefined,
+        createdAt: assistantCreatedAt,
+      })
+
+      await ctx.runMutation(tableAgentApi.updateAgentThreadRecord, {
+        threadId: threadDoc._id,
+        agentName,
+        lastMode: mode,
+        updatedAt: assistantCreatedAt,
+        lastMessageAt: assistantCreatedAt,
+        lastMessageSummary: assistantSummary,
+      })
+
       return {
         mode: 'analysis' as const,
-        text: res.text,
-        threadId: thread.threadId,
+        text: assistantText,
+        threadId: agentThreadId,
         toolSteps: toolSteps,
         commands: [], // Analysis mode doesn't generate commands
-        description: res.text.substring(0, 200), // Use first 200 chars as description
+        description: assistantSummary, // Use first 200 chars as description
       }
     }
+  },
+})
+
+export const getAgentThreadByExternalId = query({
+  args: {
+    agentThreadId: v.string(),
+  },
+  handler: async (ctx, { agentThreadId }) => {
+    const thread = await ctx.db
+      .query('agentThreads')
+      .withIndex('by_agentThreadId', (q) =>
+        q.eq('agentThreadId', agentThreadId),
+      )
+      .unique()
+    return thread
+  },
+})
+
+export const listAgentThreads = query({
+  args: {
+    tableName: v.string(),
+  },
+  handler: async (ctx, { tableName }) => {
+    const userId = await checkAuth(ctx)
+    const threads = await ctx.db
+      .query('agentThreads')
+      .withIndex('by_user_table_lastMessageAt', (q) =>
+        q.eq('userId', userId).eq('tableName', tableName),
+      )
+      .collect()
+
+    threads.sort((a, b) => b.lastMessageAt - a.lastMessageAt)
+
+    return threads.map((thread) => ({
+      _id: thread._id,
+      agentThreadId: thread.agentThreadId,
+      tableName: thread.tableName,
+      agentName: thread.agentName,
+      title: thread.title,
+      createdAt: thread.createdAt,
+      updatedAt: thread.updatedAt,
+      lastMessageAt: thread.lastMessageAt,
+      lastMessageSummary: thread.lastMessageSummary,
+      lastMode: thread.lastMode,
+    }))
+  },
+})
+
+export const getAgentThreadMessages = query({
+  args: {
+    agentThreadId: v.string(),
+  },
+  handler: async (ctx, { agentThreadId }) => {
+    const userId = await checkAuth(ctx)
+    const thread = await ctx.db
+      .query('agentThreads')
+      .withIndex('by_agentThreadId', (q) =>
+        q.eq('agentThreadId', agentThreadId),
+      )
+      .unique()
+
+    if (!thread || thread.userId !== userId) {
+      throw new Error('Thread not found or access denied')
+    }
+
+    const messages = await ctx.db
+      .query('agentMessages')
+      .withIndex('by_thread', (q) => q.eq('threadId', thread._id))
+      .collect()
+
+    messages.sort((a, b) => a.createdAt - b.createdAt)
+
+    return {
+      thread: {
+        _id: thread._id,
+        agentThreadId: thread.agentThreadId,
+        tableName: thread.tableName,
+        agentName: thread.agentName,
+        title: thread.title,
+        lastMode: thread.lastMode,
+        lastMessageAt: thread.lastMessageAt,
+        lastMessageSummary: thread.lastMessageSummary,
+        createdAt: thread.createdAt,
+        updatedAt: thread.updatedAt,
+      },
+      messages: messages.map((message) => ({
+        _id: message._id,
+        role: message.role,
+        content: message.content,
+        description: message.description,
+        commands: message.commands ?? [],
+        toolSteps: message.toolSteps ?? [],
+        mode: message.mode,
+        agentName: message.agentName,
+        createdAt: message.createdAt,
+      })),
+    }
+  },
+})
+
+export const createAgentThreadRecord = mutation({
+  args: {
+    userId: v.string(),
+    tableName: v.string(),
+    agentThreadId: v.string(),
+    agentName: v.string(),
+    title: v.string(),
+    createdAt: v.number(),
+    lastMode: v.union(v.literal('query'), v.literal('analysis')),
+  },
+  handler: async (
+    ctx,
+    { userId, tableName, agentThreadId, agentName, title, createdAt, lastMode },
+  ) => {
+    const threadId = await ctx.db.insert('agentThreads', {
+      userId,
+      tableName,
+      agentThreadId,
+      agentName,
+      title,
+      createdAt,
+      updatedAt: createdAt,
+      lastMessageAt: createdAt,
+      lastMessageSummary: '',
+      lastMode,
+    })
+    return await ctx.db.get(threadId)
+  },
+})
+
+export const updateAgentThreadRecord = mutation({
+  args: {
+    threadId: v.id('agentThreads'),
+    title: v.optional(v.string()),
+    agentName: v.optional(v.string()),
+    updatedAt: v.optional(v.number()),
+    lastMessageAt: v.optional(v.number()),
+    lastMessageSummary: v.optional(v.string()),
+    lastMode: v.optional(v.union(v.literal('query'), v.literal('analysis'))),
+  },
+  handler: async (
+    ctx,
+    {
+      threadId,
+      title,
+      agentName,
+      updatedAt,
+      lastMessageAt,
+      lastMessageSummary,
+      lastMode,
+    },
+  ) => {
+    const patch: Record<string, any> = {}
+    if (title !== undefined) patch.title = title
+    if (agentName !== undefined) patch.agentName = agentName
+    if (updatedAt !== undefined) patch.updatedAt = updatedAt
+    if (lastMessageAt !== undefined) patch.lastMessageAt = lastMessageAt
+    if (lastMessageSummary !== undefined) {
+      patch.lastMessageSummary = lastMessageSummary
+    }
+    if (lastMode !== undefined) patch.lastMode = lastMode
+    if (Object.keys(patch).length > 0) {
+      await ctx.db.patch(threadId, patch)
+    }
+  },
+})
+
+export const insertAgentMessageRecord = mutation({
+  args: {
+    threadId: v.id('agentThreads'),
+    role: v.union(v.literal('user'), v.literal('assistant')),
+    userId: v.optional(v.string()),
+    agentName: v.optional(v.string()),
+    mode: v.union(v.literal('query'), v.literal('analysis')),
+    content: v.string(),
+    description: v.optional(v.string()),
+    commands: v.optional(v.array(v.string())),
+    toolSteps: v.optional(
+      v.array(
+        v.object({
+          tool: v.string(),
+          args: v.any(),
+          result: v.any(),
+        }),
+      ),
+    ),
+    createdAt: v.number(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.insert('agentMessages', args)
   },
 })

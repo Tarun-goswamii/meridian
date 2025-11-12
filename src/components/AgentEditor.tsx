@@ -14,6 +14,7 @@ import {
   ActionIcon,
   Badge,
   SegmentedControl,
+  Select,
 } from '@mantine/core'
 import {
   IconSparkles,
@@ -22,6 +23,7 @@ import {
   IconChevronDown,
   IconChevronUp,
   IconCode,
+  IconPlus,
 } from '@tabler/icons-react'
 import { CustomMarkdown } from './Markdown'
 
@@ -31,12 +33,24 @@ interface ToolStep {
   result?: any
 }
 
+interface AgentThreadSummary {
+  agentThreadId: string
+  title?: string | null
+  lastMessageSummary?: string | null
+  lastMessageAt?: number
+  lastMode?: 'query' | 'analysis'
+  agentName?: string | null
+}
+
 interface Message {
   role: 'user' | 'assistant'
   content: string
+  description?: string
   commands?: string[]
   toolSteps?: ToolStep[]
   mode?: 'query' | 'analysis'
+  agentName?: string
+  createdAt?: number
 }
 
 interface MessagePairProps {
@@ -248,6 +262,10 @@ interface AgentEditorProps {
   onErrorClose: () => void
   isExecuting: boolean
   description?: string
+  threads?: AgentThreadSummary[]
+  selectedThreadId?: string
+  onThreadSelect?: (threadId?: string) => void
+  onCreateThread?: () => void
   messages?: Message[]
   commandQueue?: string[]
   currentCommandIndex?: number
@@ -263,6 +281,10 @@ export function AgentEditor({
   onErrorClose,
   isExecuting,
   description,
+  threads = [],
+  selectedThreadId,
+  onThreadSelect,
+  onCreateThread,
   messages = [],
   commandQueue = [],
   currentCommandIndex = 0,
@@ -375,6 +397,50 @@ export function AgentEditor({
                 size="xs"
                 fullWidth
               />
+            )}
+            {(threads.length > 0 || onCreateThread) && (
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '1rem',
+                }}
+              >
+                <Select
+                  size="xs"
+                  placeholder={
+                    threads.length > 0
+                      ? 'Select a conversation'
+                      : 'No saved conversations'
+                  }
+                  data={threads.map((thread) => ({
+                    value: thread.agentThreadId,
+                    label: thread.title || 'Untitled conversation',
+                  }))}
+                  value={selectedThreadId ?? null}
+                  onChange={(value) => {
+                    if (!onThreadSelect) return
+                    if (value) {
+                      onThreadSelect(value)
+                    } else {
+                      onThreadSelect(undefined)
+                    }
+                  }}
+                  w="100%"
+                  // searchable
+                  clearable
+                  allowDeselect
+                  disabled={threads.length === 0}
+                  nothingFoundMessage="No conversations"
+                />
+                {onCreateThread && (
+                  <Button size="xs" variant="light" onClick={onCreateThread}>
+                    <IconPlus size={16} />
+                  </Button>
+                )}
+              </div>
             )}
           </Stack>
         </Box>
