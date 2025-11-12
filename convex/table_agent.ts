@@ -1,3 +1,4 @@
+// x.com/TheIshanGoswami/status/1988346353660162394 - Do this / Firecrawl in agent
 import { api, components } from './_generated/api'
 import { Agent, createTool } from '@convex-dev/agent'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
@@ -31,7 +32,7 @@ export const fetchDuckDBQuery = action({
   args: { query: v.string() },
   handler: async (ctx, { query }) => {
     const serverUrl =
-      process.env.DUCKDB_SERVER_URL || 'https://169d9edabf2c.ngrok-free.app'
+      process.env.DUCKDB_SERVER_URL || 'https://644b3e82bb27.ngrok-free.app'
 
     const response = await fetch(`${serverUrl}/api/duckdb/query`, {
       method: 'POST',
@@ -318,16 +319,91 @@ Use the available tools to explore the database and provide a helpful answer. Sh
         },
       )
 
-      // Extract tool steps from the response
+      // Extract tool steps from thread messages
       const toolSteps: Array<{
         tool: string
         args: any
         result: any
       }> = []
 
-      // The agent framework should provide tool call information
-      // We'll need to extract this from the response or thread history
-      // For now, we'll return the text and let the frontend handle tool step display
+      try {
+        // Query thread messages to get tool calls and results
+        const messages = await ctx.runQuery(
+          components.agent.messages.listMessagesByThreadId,
+          {
+            threadId: thread.threadId,
+            order: 'asc',
+            paginationOpts: { cursor: null, numItems: 100 },
+          },
+        )
+
+        // Map to store tool calls by toolCallId
+        const toolCallMap = new Map<
+          string,
+          { tool: string; args: any; result?: any }
+        >()
+
+        // Process messages to extract tool calls and results
+        for (const msg of messages.page) {
+          if (msg.message && typeof msg.message === 'object') {
+            const message = msg.message
+
+            // Check for assistant messages with tool-call content
+            if (
+              message.role === 'assistant' &&
+              Array.isArray(message.content)
+            ) {
+              for (const content of message.content) {
+                if (
+                  typeof content === 'object' &&
+                  content.type === 'tool-call'
+                ) {
+                  toolCallMap.set(content.toolCallId, {
+                    tool: content.toolName,
+                    args: content.args,
+                  })
+                }
+              }
+            }
+
+            // Check for tool messages with tool-result content
+            if (message.role === 'tool' && Array.isArray(message.content)) {
+              for (const content of message.content) {
+                if (
+                  typeof content === 'object' &&
+                  content.type === 'tool-result'
+                ) {
+                  const toolCall = toolCallMap.get(content.toolCallId)
+                  if (toolCall) {
+                    // Extract result from output or result field
+                    let result = content.result
+                    if (!result && content.output) {
+                      if (content.output.type === 'json') {
+                        result = content.output.value
+                      } else if (content.output.type === 'text') {
+                        result = content.output.value
+                      }
+                    }
+                    toolCall.result = result
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        // Convert map to array of tool steps, ensuring result is always present
+        for (const toolCall of toolCallMap.values()) {
+          toolSteps.push({
+            tool: toolCall.tool,
+            args: toolCall.args,
+            result: toolCall.result ?? null,
+          })
+        }
+      } catch (error) {
+        console.error('Error extracting tool steps:', error)
+        // Continue without tool steps if extraction fails
+      }
 
       return {
         mode: 'analysis' as const,
@@ -340,15 +416,3 @@ Use the available tools to explore the database and provide a helpful answer. Sh
     }
   },
 })
-
-// const getWeather = createTool({
-//   description: 'Get the current weather for a city',
-//   args: z.object({ city: z.string().describe('The city to get weather for') }),
-//   handler: async (ctx, args) => {
-//     return {
-//       city: args.city,
-//       temperature: '26 °C',
-//       description: 'Weather in' + args.city + ' is 26 °C',
-//     }
-//   },
-// })

@@ -23,6 +23,7 @@ import {
   IconChevronUp,
   IconCode,
 } from '@tabler/icons-react'
+import { CustomMarkdown } from './Markdown'
 
 interface ToolStep {
   tool: string
@@ -50,7 +51,7 @@ function MessagePair({ user, assistant }: MessagePairProps) {
     <Box
       p="sm"
       style={{
-        backgroundColor: 'rgb(243, 243, 243)',
+        backgroundColor: 'rgb(253, 253, 253)',
         backdropFilter: 'blur(10px)',
         WebkitBackdropFilter: 'blur(10px)',
         borderRadius: 'var(--mantine-radius-md)',
@@ -96,7 +97,7 @@ function MessagePair({ user, assistant }: MessagePairProps) {
                 style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}
                 pl={24}
               >
-                {assistant.content}
+                <CustomMarkdown>{assistant.content}</CustomMarkdown>
               </Text>
 
               {/* Tool Steps */}
