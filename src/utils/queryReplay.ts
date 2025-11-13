@@ -6,6 +6,7 @@ export type QueryLog = {
   query: string
   executedAt: number
   userId: string
+  tableName: string
   success: boolean
   error?: string
   sequenceNumber: number
@@ -36,10 +37,14 @@ export type ReplaySummary = {
  * This will execute all queries in order to recreate the DuckDB state
  */
 export async function replayQueriesUpTo(
+  tableName: string,
   sequenceNumber: number,
-  getQueryLogsUpTo: (args: { sequenceNumber: number }) => Promise<QueryLog[]>,
+  getQueryLogsUpTo: (args: {
+    tableName: string
+    sequenceNumber: number
+  }) => Promise<QueryLog[]>,
 ): Promise<ReplaySummary> {
-  const logs = await getQueryLogsUpTo({ sequenceNumber })
+  const logs = await getQueryLogsUpTo({ tableName, sequenceNumber })
 
   const results: ReplayResult[] = []
   let successCount = 0
@@ -94,9 +99,13 @@ export async function replayQueriesUpTo(
  * Replay all queries (full database recreation)
  */
 export async function replayAllQueries(
-  getQueryLogs: (args?: { limit?: number }) => Promise<QueryLog[]>,
+  tableName: string,
+  getQueryLogs: (args?: {
+    tableName?: string
+    limit?: number
+  }) => Promise<QueryLog[]>,
 ): Promise<ReplaySummary> {
-  const logs = await getQueryLogs({ limit: 10000 })
+  const logs = await getQueryLogs({ tableName, limit: 10000 })
 
   const results: ReplayResult[] = []
   let successCount = 0

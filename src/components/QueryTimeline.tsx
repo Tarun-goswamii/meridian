@@ -44,6 +44,7 @@ interface QueryTimelineProps {
 type LogType = {
   _id: string
   query: string
+  tableName: string
   success: boolean
   error?: string
   resultMetadata?: {
@@ -75,7 +76,10 @@ export function QueryTimeline({
   tableName,
   onRollbackComplete,
 }: QueryTimelineProps) {
-  const queryLogs = useQuery(api.queryLog.getQueryLogs, { limit: 100 })
+  const queryLogs = useQuery(api.queryLog.getQueryLogs, {
+    tableName,
+    limit: 100,
+  })
   const fileInfo = useQuery(api.csv.getFileByTableName, { tableName })
 
   const [isRollingBack, setIsRollingBack] = useState<number | null>(null)
@@ -86,7 +90,7 @@ export function QueryTimeline({
   const logs = useQuery(
     api.queryLog.getQueryLogsUpTo,
     rollbackSequenceNumber !== null
-      ? { sequenceNumber: rollbackSequenceNumber }
+      ? { tableName, sequenceNumber: rollbackSequenceNumber }
       : 'skip',
   )
 
@@ -124,9 +128,16 @@ export function QueryTimeline({
     )
   }
 
-  const handleRollback = (sequenceNumber: number) => {
+  const handleRollback = (sequenceNumber: number, logTableName: string) => {
     if (!fileInfo) {
       alert('Original file not found. Cannot rollback.')
+      return
+    }
+    // Validate that the query belongs to the current table
+    if (logTableName !== tableName) {
+      alert(
+        `Cannot rollback: This query belongs to table "${logTableName}", but you are currently viewing table "${tableName}".`,
+      )
       return
     }
     setIsRollingBack(sequenceNumber)
@@ -136,6 +147,16 @@ export function QueryTimeline({
   const performRollback = async (logs: LogType[], sequenceNumber: number) => {
     if (!fileInfo) {
       alert('Original file not found. Cannot rollback.')
+      setIsRollingBack(null)
+      setRollbackSequenceNumber(null)
+      return
+    }
+    // Validate that all logs belong to the current table
+    const invalidLogs = logs.filter((log) => log.tableName !== tableName)
+    if (invalidLogs.length > 0) {
+      alert(
+        `Cannot rollback: Some queries belong to different tables. This should not happen.`,
+      )
       setIsRollingBack(null)
       setRollbackSequenceNumber(null)
       return
@@ -415,16 +436,33 @@ export function QueryTimeline({
                         </Badge>
                       )}
                     </Group>
-                    {!isLast && (
+                    {!isLast && log.tableName === tableName && (
                       <Tooltip label="Rollback to after this query" withArrow>
                         <Button
                           size="xs"
-                          onClick={() => handleRollback(log.sequenceNumber)}
+                          onClick={() =>
+                            handleRollback(log.sequenceNumber, log.tableName)
+                          }
                           loading={isRollingBackToThis}
                           disabled={isRollingBack !== null}
                           style={{ fontWeight: 600 }}
                         >
                           Rollback
+                        </Button>
+                      </Tooltip>
+                    )}
+                    {!isLast && log.tableName !== tableName && (
+                      <Tooltip
+                        label={`This query belongs to table "${log.tableName}"`}
+                        withArrow
+                      >
+                        <Button
+                          size="xs"
+                          disabled
+                          variant="subtle"
+                          style={{ fontWeight: 600 }}
+                        >
+                          Different Table
                         </Button>
                       </Tooltip>
                     )}

@@ -192,6 +192,7 @@ function RouteComponent() {
       // Log successful query
       await logQuery({
         query,
+        tableName: table,
         success: true,
         resultMetadata,
       })
@@ -244,6 +245,7 @@ function RouteComponent() {
       try {
         await logQuery({
           query,
+          tableName: table,
           success: false,
           error: errorMessage,
           resultMetadata: {

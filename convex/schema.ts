@@ -44,6 +44,7 @@ export default defineSchema({
     query: v.string(),
     executedAt: v.number(),
     userId: v.string(),
+    tableName: v.string(),
     success: v.boolean(),
     error: v.optional(v.string()),
     sequenceNumber: v.number(),
@@ -56,7 +57,9 @@ export default defineSchema({
     ),
   })
     .index('by_userId', ['userId'])
-    .index('by_sequenceNumber', ['sequenceNumber']),
+    .index('by_sequenceNumber', ['sequenceNumber'])
+    .index('by_tableName', ['tableName'])
+    .index('by_userId_tableName', ['userId', 'tableName']),
   agentThreads: defineTable({
     userId: v.string(),
     tableName: v.string(),
