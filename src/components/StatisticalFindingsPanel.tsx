@@ -11,7 +11,7 @@ import {
   Text,
   Badge,
 } from '@mantine/core'
-import { IconChevronDown, IconChevronRight, Icon123 } from '@tabler/icons-react'
+import { IconChevronDown, IconChevronRight } from '@tabler/icons-react'
 import {
   useReactTable,
   getCoreRowModel,

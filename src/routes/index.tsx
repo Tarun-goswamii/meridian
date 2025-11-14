@@ -4,7 +4,6 @@ import {
   Title,
   Text,
   Button,
-  Badge,
   Stack,
   List,
   ThemeIcon,

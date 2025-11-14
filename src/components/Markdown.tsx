@@ -5,7 +5,6 @@ import {
   Title,
   List,
   ListItem,
-  Code,
   Blockquote,
   Anchor,
 } from '@mantine/core'

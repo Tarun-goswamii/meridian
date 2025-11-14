@@ -60,12 +60,34 @@ interface MessagePairProps {
 
 function MessagePair({ user, assistant }: MessagePairProps) {
   const [commandsExpanded, setCommandsExpanded] = useState(false)
+  // Add expand/collapse state for each tool step
+  const [toolStepsExpanded, setToolStepsExpanded] = useState<
+    Record<number, boolean>
+  >({})
+
+  // Initialize all tool steps as expanded by default when assistant.toolSteps changes
+  useEffect(() => {
+    if (assistant?.toolSteps) {
+      const initial: Record<number, boolean> = {}
+      assistant.toolSteps.forEach((_, idx) => {
+        initial[idx] = false
+      })
+      setToolStepsExpanded(initial)
+    }
+  }, [assistant?.toolSteps])
+
+  const handleToggleToolStep = (idx: number) => {
+    setToolStepsExpanded((prev) => ({
+      ...prev,
+      [idx]: !prev[idx],
+    }))
+  }
 
   return (
     <Box
       p="sm"
       style={{
-        backgroundColor: 'rgb(253, 253, 253)',
+        backgroundColor: 'rgba(59, 130, 246, 0.08)',
         backdropFilter: 'blur(10px)',
         WebkitBackdropFilter: 'blur(10px)',
         borderRadius: 'var(--mantine-radius-md)',
@@ -137,26 +159,76 @@ function MessagePair({ user, assistant }: MessagePairProps) {
                           border: '1px solid rgba(59, 130, 246, 0.2)',
                         }}
                       >
-                        <Text size="xs" fw={500} c="blue" mb={4}>
-                          {step.tool}
-                        </Text>
-                        {step.args && (
-                          <Text size="xs" c="dimmed" mb={4}>
-                            Args: {JSON.stringify(step.args, null, 2)}
-                          </Text>
-                        )}
-                        {step.result && (
-                          <Text size="xs" c="dimmed">
-                            Result:{' '}
-                            {JSON.stringify(step.result, null, 2).substring(
-                              0,
-                              200,
+                        <Group
+                          gap="xs"
+                          align="center"
+                          style={{ cursor: 'pointer' }}
+                          onClick={() => handleToggleToolStep(idx)}
+                        >
+                          <ActionIcon size="xs" variant="subtle" color="blue">
+                            {toolStepsExpanded[idx] ? (
+                              <IconChevronUp size={14} />
+                            ) : (
+                              <IconChevronDown size={14} />
                             )}
-                            {JSON.stringify(step.result, null, 2).length > 200
-                              ? '...'
-                              : ''}
+                          </ActionIcon>
+                          <Text size="xs" fw={500} c="blue" mb={4}>
+                            {step.tool}
                           </Text>
-                        )}
+                        </Group>
+                        <Collapse
+                          in={toolStepsExpanded[idx]}
+                          transitionDuration={120}
+                        >
+                          {step.args && (
+                            <Box mb={4}>
+                              <Text size="xs" c="dimmed" fw={500} mb={2}>
+                                Args:
+                              </Text>
+                              <Box
+                                component="pre"
+                                style={{
+                                  background: 'rgba(0,0,0,0.04)',
+                                  borderRadius: 6,
+                                  padding: 8,
+                                  fontSize: 12,
+                                  fontFamily:
+                                    'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
+                                  whiteSpace: 'pre-wrap',
+                                  wordBreak: 'break-word',
+                                  margin: 0,
+                                }}
+                              >
+                                {JSON.stringify(step.args, null, 2)}
+                              </Box>
+                            </Box>
+                          )}
+                          {step.result && (
+                            <Box>
+                              <Text size="xs" c="dimmed" fw={500} mb={2}>
+                                Result:
+                              </Text>
+                              <Box
+                                component="pre"
+                                style={{
+                                  background: 'rgba(0,0,0,0.04)',
+                                  borderRadius: 6,
+                                  padding: 8,
+                                  fontSize: 12,
+                                  fontFamily:
+                                    'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
+                                  whiteSpace: 'pre-wrap',
+                                  wordBreak: 'break-word',
+                                  margin: 0,
+                                  maxHeight: 200,
+                                  overflowY: 'auto',
+                                }}
+                              >
+                                {JSON.stringify(step.result, null, 2)}
+                              </Box>
+                            </Box>
+                          )}
+                        </Collapse>
                       </Box>
                     ))}
                   </Stack>

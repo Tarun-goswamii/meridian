@@ -56,21 +56,21 @@ type LogType = {
   executedAt: number
 }
 
-function getQuerySummary(query: string): string {
-  // Try to extract the first word and the first table name or identifier
-  // e.g. "UPDATE users SET ..." => "UPDATE users"
-  // e.g. "SELECT * FROM foo WHERE ..." => "SELECT foo"
-  const match = query.match(
-    /^\s*(\w+)\s+(?:\*|[\w, ]+)?(?:FROM|INTO|TABLE)?\s*([a-zA-Z0-9_]+)/i,
-  )
-  if (match) {
-    return `${match[1].toUpperCase()} ${match[2]}`
-  }
-  // fallback to first 30 chars
-  return (
-    query.slice(0, 30).replace(/\s+/g, ' ') + (query.length > 30 ? '...' : '')
-  )
-}
+// function getQuerySummary(query: string): string {
+//   // Try to extract the first word and the first table name or identifier
+//   // e.g. "UPDATE users SET ..." => "UPDATE users"
+//   // e.g. "SELECT * FROM foo WHERE ..." => "SELECT foo"
+//   const match = query.match(
+//     /^\s*(\w+)\s+(?:\*|[\w, ]+)?(?:FROM|INTO|TABLE)?\s*([a-zA-Z0-9_]+)/i,
+//   )
+//   if (match) {
+//     return `${match[1].toUpperCase()} ${match[2]}`
+//   }
+//   // fallback to first 30 chars
+//   return (
+//     query.slice(0, 30).replace(/\s+/g, ' ') + (query.length > 30 ? '...' : '')
+//   )
+// }
 
 export function QueryTimeline({
   tableName,
@@ -100,7 +100,7 @@ export function QueryTimeline({
       rollbackSequenceNumber !== null &&
       isRollingBack !== null // prevent double-rollback if already finished
     ) {
-      performRollback(logs as LogType[], rollbackSequenceNumber)
+      performRollback(logs as LogType[])
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [logs, rollbackSequenceNumber])
@@ -144,7 +144,7 @@ export function QueryTimeline({
     setRollbackSequenceNumber(sequenceNumber) // triggers the query
   }
 
-  const performRollback = async (logs: LogType[], sequenceNumber: number) => {
+  const performRollback = async (logs: LogType[]) => {
     if (!fileInfo) {
       alert('Original file not found. Cannot rollback.')
       setIsRollingBack(null)
