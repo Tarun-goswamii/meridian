@@ -85,8 +85,7 @@ export function TableSidebar({
     <Box
       style={{
         position: 'fixed',
-        right: 15,
-        top: 10,
+        right: 0,
         bottom: 0,
         width: 400,
         zIndex: 200,
@@ -94,7 +93,7 @@ export function TableSidebar({
         backgroundColor: 'transparent',
         display: 'flex',
         flexDirection: 'column',
-        height: 'calc(100vh - 60px)',
+        height: '100vh',
         gap: '12px',
       }}
     >
@@ -166,7 +165,14 @@ export function TableSidebar({
       </Box>
 
       {/* Active Panel Content */}
-      <Box style={{ flex: 1, minHeight: 0 }}>
+      <Box
+        style={{
+          flex: 1,
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
         {activePanel === 'agent' ? (
           <AgentEditor
             input={agentInput}

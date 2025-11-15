@@ -1,8 +1,10 @@
 // x.com/TheIshanGoswami/status/1988346353660162394 - Do this / Firecrawl in agent
+// Also, the tools are shown incrementally in the UI
+// Harr msg mei pervious tools hai
 import { api, components } from './_generated/api'
 import { Agent, createTool } from '@convex-dev/agent'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
-import { action, mutation, query } from './_generated/server'
+import { action } from './_generated/server'
 import { v } from 'convex/values'
 import { checkAuth } from './authFns'
 import { z } from 'zod'
@@ -46,9 +48,9 @@ function summarizeText(text: string, limit = 200) {
 // Action to fetch DuckDB query results
 export const fetchDuckDBQuery = action({
   args: { query: v.string() },
-  handler: async (ctx, { query }) => {
+  handler: async (_, { query }) => {
     const serverUrl =
-      process.env.DUCKDB_SERVER_URL || 'https://644b3e82bb27.ngrok-free.app'
+      process.env.DUCKDB_SERVER_URL || 'https://de2261a83878.ngrok-free.app'
 
     const response = await fetch(`${serverUrl}/api/duckdb/query`, {
       method: 'POST',
@@ -196,7 +198,7 @@ When a user asks a question:
 1. Use the available tools to explore the database and gather information
 2. Analyze the data you retrieve
 3. Provide a clear, helpful answer based on your findings
-4. Be super concise, and don't explain anything about how you got to your analysis
+
 
 Be thorough but efficient. Use tools strategically to gather the information needed to answer the user's question.
 `,
@@ -237,12 +239,12 @@ export const askGemini = action({
 
     const agent = mode === 'query' ? query_agent : analysis_agent
     const agentName = mode === 'query' ? 'Query Agent' : 'Analysis Agent'
-    const tableAgentApi = api.table_agent as any
+    const agentUtilsApi = api.agent_utils
     const now = Date.now()
 
     let threadDoc: any =
       threadId != null
-        ? await ctx.runQuery(tableAgentApi.getAgentThreadByExternalId, {
+        ? await ctx.runQuery(agentUtilsApi.getAgentThreadByExternalId, {
             agentThreadId: threadId,
           })
         : null
@@ -267,7 +269,7 @@ export const askGemini = action({
       agentThreadId = createdThread.threadId
       threadReference = { threadId: createdThread.threadId }
       const createdDoc = await ctx.runMutation(
-        tableAgentApi.createAgentThreadRecord,
+        agentUtilsApi.createAgentThreadRecord,
         {
           userId: user_id,
           tableName,
@@ -283,7 +285,7 @@ export const askGemini = action({
       }
       threadDoc = createdDoc
     } else if (threadDoc) {
-      await ctx.runMutation(tableAgentApi.updateAgentThreadRecord, {
+      await ctx.runMutation(agentUtilsApi.updateAgentThreadRecord, {
         threadId: threadDoc._id,
         agentName,
         lastMode: mode,
@@ -303,14 +305,14 @@ export const askGemini = action({
 
     if (!threadDoc.title) {
       const title = createThreadTitle(prompt)
-      await ctx.runMutation(tableAgentApi.updateAgentThreadRecord, {
+      await ctx.runMutation(agentUtilsApi.updateAgentThreadRecord, {
         threadId: threadDoc._id,
         title,
       })
       threadDoc = { ...threadDoc, title }
     }
 
-    await ctx.runMutation(tableAgentApi.insertAgentMessageRecord, {
+    await ctx.runMutation(agentUtilsApi.insertAgentMessageRecord, {
       threadId: threadDoc._id,
       role: 'user',
       userId: user_id,
@@ -319,6 +321,7 @@ export const askGemini = action({
       createdAt: now,
     })
 
+    // Query mode -------------------------------------------------------------------------------------
     if (mode === 'query') {
       // Query mode: generate SQL queries
       const columnInfo = columns
@@ -346,45 +349,95 @@ Please write a DuckDB SQL queries for the table "${tableName}" based on the user
       // Ensure Gemini prompt does not exceed limit
       contextualPrompt = trimToLimit(contextualPrompt, GEMINI_PROMPT_LIMIT)
 
-      const res: any = await agent.generateObject(ctx, threadReference, {
-        prompt: contextualPrompt,
-        schema: z.object({
-          commands: z
-            .array(
-              z
-                .string()
-                .describe(
-                  'The query / command to execute on the duck db Should always be valid Duck DB SQL code',
-                ),
-            )
-            .min(1)
-            .max(10),
-          description: z
-            .string()
-            .describe('A description of what the query does Max 50 words'),
-        }),
-      })
+      let finalObject: {
+        commands: string[]
+        description: string
+      } = {
+        commands: [],
+        description: '',
+      }
 
       try {
-        if (!res.object.commands || !res.object.description) {
+        const objstream = await agent.streamObject(ctx, threadReference, {
+          prompt: contextualPrompt,
+          schema: z.object({
+            commands: z
+              .array(
+                z
+                  .string()
+                  .describe(
+                    'The query / command to execute on the duck db Should always be valid Duck DB SQL code',
+                  ),
+              )
+              .min(1)
+              .max(10),
+            description: z
+              .string()
+              .describe('A description of what the query does Max 50 words'),
+          }),
+        })
+
+        const createdAt = Date.now()
+        const message_id = await ctx.runMutation(
+          agentUtilsApi.insertAgentMessageRecord,
+          {
+            threadId: threadDoc._id,
+            role: 'assistant',
+            agentName,
+            mode,
+            content: finalObject.description,
+            description: finalObject.description,
+            commands: finalObject.commands,
+            createdAt: createdAt,
+          },
+        )
+
+        // Only take the first valid partialObject, or the last one if multiple
+        for await (const partialObject of objstream.partialObjectStream) {
+          if (
+            Array.isArray(partialObject.commands) &&
+            typeof partialObject.description === 'string'
+          ) {
+            finalObject = {
+              commands: partialObject.commands.filter(
+                (cmd): cmd is string => typeof cmd === 'string',
+              ),
+              description: partialObject.description,
+            }
+
+            await ctx.scheduler.runAfter(
+              0,
+              agentUtilsApi.updateAgentMessageRecord,
+              {
+                threadId: threadDoc._id,
+                messageId: message_id,
+                agentName,
+                mode,
+                content: partialObject.description,
+                description: partialObject.description,
+                commands: Array.isArray(partialObject.commands)
+                  ? partialObject.commands.filter(
+                      (cmd: any): cmd is string => typeof cmd === 'string',
+                    )
+                  : [],
+              },
+            )
+          }
+        }
+
+        // If no valid result, throw
+        if (
+          !finalObject.commands.length ||
+          !finalObject.description ||
+          typeof finalObject.description !== 'string'
+        ) {
           throw new Error('Invalid response format from agent')
         }
 
         const assistantCreatedAt = Date.now()
-        const assistantSummary = summarizeText(res.object.description)
+        const assistantSummary = summarizeText(finalObject.description)
 
-        await ctx.runMutation(tableAgentApi.insertAgentMessageRecord, {
-          threadId: threadDoc._id,
-          role: 'assistant',
-          agentName,
-          mode,
-          content: res.object.description,
-          description: res.object.description,
-          commands: res.object.commands,
-          createdAt: assistantCreatedAt,
-        })
-
-        await ctx.runMutation(tableAgentApi.updateAgentThreadRecord, {
+        await ctx.runMutation(agentUtilsApi.updateAgentThreadRecord, {
           threadId: threadDoc._id,
           agentName,
           lastMode: mode,
@@ -395,10 +448,10 @@ Please write a DuckDB SQL queries for the table "${tableName}" based on the user
 
         return {
           mode: 'query' as const,
-          commands: res.object.commands,
-          description: res.object.description,
+          commands: finalObject.commands,
+          description: finalObject.description,
           threadId: agentThreadId,
-          toolSteps: [], // Query mode doesn't use tools
+          toolSteps: [],
         }
       } catch (error) {
         const assistantCreatedAt = Date.now()
@@ -406,7 +459,7 @@ Please write a DuckDB SQL queries for the table "${tableName}" based on the user
           'Error: Agent returned invalid response format' +
           (error instanceof Error ? ` (${error.message})` : '')
 
-        await ctx.runMutation(tableAgentApi.insertAgentMessageRecord, {
+        await ctx.runMutation(agentUtilsApi.insertAgentMessageRecord, {
           threadId: threadDoc._id,
           role: 'assistant',
           agentName,
@@ -417,7 +470,7 @@ Please write a DuckDB SQL queries for the table "${tableName}" based on the user
           createdAt: assistantCreatedAt,
         })
 
-        await ctx.runMutation(tableAgentApi.updateAgentThreadRecord, {
+        await ctx.runMutation(agentUtilsApi.updateAgentThreadRecord, {
           threadId: threadDoc._id,
           agentName,
           lastMode: mode,
@@ -434,8 +487,9 @@ Please write a DuckDB SQL queries for the table "${tableName}" based on the user
           toolSteps: [],
         }
       }
+    // Analysis mode ------------------------------------------------------------------------------
     } else {
-      // Analysis mode: use tools and generate text response
+      // Analysis mode --------------------------------------------------------------------------------
       let contextualPrompt = `
 You are analyzing the table "${tableName}".
 
@@ -451,102 +505,36 @@ Use the available tools to explore the database and provide a helpful answer.`
       // Ensure Gemini prompt does not exceed limit
       contextualPrompt = trimToLimit(contextualPrompt, GEMINI_PROMPT_LIMIT)
 
-      const res: any = await agent.generateText(ctx, threadReference, {
+      // const res = await agent.generateText(ctx, threadReference, {
+      //   prompt: contextualPrompt,
+      // })
+
+      // console.log('ANALYSIS RES:', JSON.parse(JSON.stringify(res, null, 2)))
+
+      // STREAMING --------------------------------
+      const stream = await agent.streamText(ctx, threadReference, {
         prompt: contextualPrompt,
       })
 
-      const assistantText = res.text ?? ''
+      for await (const st_part of stream.fullStream) {
+        console.log('STREAM PART:', st_part)
+      }
+      // STREAMING --------------------------------
 
-      // Extract tool steps from thread messages
+      // const assistantText = res.text ?? ''
+      const assistantText = ''
+
+      // Extract tool steps from the CURRENT response only (not previous messages)
       const toolSteps: Array<{
         tool: string
         args: any
         result: any
       }> = []
 
-      try {
-        // Query thread messages to get tool calls and results
-        const messages = await ctx.runQuery(
-          components.agent.messages.listMessagesByThreadId,
-          {
-            threadId: threadReference.threadId,
-            order: 'asc',
-            paginationOpts: { cursor: null, numItems: 100 },
-          },
-        )
-
-        // Map to store tool calls by toolCallId
-        const toolCallMap = new Map<
-          string,
-          { tool: string; args: any; result?: any }
-        >()
-
-        // Process messages to extract tool calls and results
-        for (const msg of messages.page) {
-          if (msg.message && typeof msg.message === 'object') {
-            const message = msg.message
-
-            // Check for assistant messages with tool-call content
-            if (
-              message.role === 'assistant' &&
-              Array.isArray(message.content)
-            ) {
-              for (const content of message.content) {
-                if (
-                  typeof content === 'object' &&
-                  content.type === 'tool-call'
-                ) {
-                  toolCallMap.set(content.toolCallId, {
-                    tool: content.toolName,
-                    args: content.args,
-                  })
-                }
-              }
-            }
-
-            // Check for tool messages with tool-result content
-            if (message.role === 'tool' && Array.isArray(message.content)) {
-              for (const content of message.content) {
-                if (
-                  typeof content === 'object' &&
-                  content.type === 'tool-result'
-                ) {
-                  const toolCall = toolCallMap.get(content.toolCallId)
-                  if (toolCall) {
-                    // Extract result from output or result field
-                    let result = content.result
-                    if (!result && content.output) {
-                      if (content.output.type === 'json') {
-                        result = content.output.value
-                      } else if (content.output.type === 'text') {
-                        result = content.output.value
-                      }
-                    }
-                    toolCall.result = result
-                  }
-                }
-              }
-            }
-          }
-        }
-
-        // Convert map to array of tool steps, ensuring result is always present
-        for (const toolCall of toolCallMap.values()) {
-          toolSteps.push({
-            tool: toolCall.tool,
-            args: toolCall.args,
-            result: toolCall.result ?? null,
-          })
-        }
-      } catch (error) {
-        console.error('Error extracting tool steps:', error)
-        // Continue without tool steps if extraction fails
-      }
-
       const assistantCreatedAt = Date.now()
       const assistantSummary = summarizeText(assistantText)
 
-      await ctx.runMutation(tableAgentApi.insertAgentMessageRecord, {
+      await ctx.runMutation(agentUtilsApi.insertAgentMessageRecord, {
         threadId: threadDoc._id,
         role: 'assistant',
         agentName,
@@ -558,7 +546,7 @@ Use the available tools to explore the database and provide a helpful answer.`
         createdAt: assistantCreatedAt,
       })
 
-      await ctx.runMutation(tableAgentApi.updateAgentThreadRecord, {
+      await ctx.runMutation(agentUtilsApi.updateAgentThreadRecord, {
         threadId: threadDoc._id,
         agentName,
         lastMode: mode,
@@ -576,195 +564,5 @@ Use the available tools to explore the database and provide a helpful answer.`
         description: assistantSummary, // Use first 200 chars as description
       }
     }
-  },
-})
-
-export const getAgentThreadByExternalId = query({
-  args: {
-    agentThreadId: v.string(),
-  },
-  handler: async (ctx, { agentThreadId }) => {
-    const thread = await ctx.db
-      .query('agentThreads')
-      .withIndex('by_agentThreadId', (q) =>
-        q.eq('agentThreadId', agentThreadId),
-      )
-      .unique()
-    return thread
-  },
-})
-
-export const listAgentThreads = query({
-  args: {
-    tableName: v.string(),
-  },
-  handler: async (ctx, { tableName }) => {
-    const userId = await checkAuth(ctx)
-    const threads = await ctx.db
-      .query('agentThreads')
-      .withIndex('by_user_table_lastMessageAt', (q) =>
-        q.eq('userId', userId).eq('tableName', tableName),
-      )
-      .collect()
-
-    threads.sort((a, b) => b.lastMessageAt - a.lastMessageAt)
-
-    return threads.map((thread) => ({
-      _id: thread._id,
-      agentThreadId: thread.agentThreadId,
-      tableName: thread.tableName,
-      agentName: thread.agentName,
-      title: thread.title,
-      createdAt: thread.createdAt,
-      updatedAt: thread.updatedAt,
-      lastMessageAt: thread.lastMessageAt,
-      lastMessageSummary: thread.lastMessageSummary,
-      lastMode: thread.lastMode,
-    }))
-  },
-})
-
-export const getAgentThreadMessages = query({
-  args: {
-    agentThreadId: v.string(),
-  },
-  handler: async (ctx, { agentThreadId }) => {
-    const userId = await checkAuth(ctx)
-    const thread = await ctx.db
-      .query('agentThreads')
-      .withIndex('by_agentThreadId', (q) =>
-        q.eq('agentThreadId', agentThreadId),
-      )
-      .unique()
-
-    if (!thread || thread.userId !== userId) {
-      throw new Error('Thread not found or access denied')
-    }
-
-    const messages = await ctx.db
-      .query('agentMessages')
-      .withIndex('by_thread', (q) => q.eq('threadId', thread._id))
-      .collect()
-
-    messages.sort((a, b) => a.createdAt - b.createdAt)
-
-    return {
-      thread: {
-        _id: thread._id,
-        agentThreadId: thread.agentThreadId,
-        tableName: thread.tableName,
-        agentName: thread.agentName,
-        title: thread.title,
-        lastMode: thread.lastMode,
-        lastMessageAt: thread.lastMessageAt,
-        lastMessageSummary: thread.lastMessageSummary,
-        createdAt: thread.createdAt,
-        updatedAt: thread.updatedAt,
-      },
-      messages: messages.map((message) => ({
-        _id: message._id,
-        role: message.role,
-        content: message.content,
-        description: message.description,
-        commands: message.commands ?? [],
-        toolSteps: message.toolSteps ?? [],
-        mode: message.mode,
-        agentName: message.agentName,
-        createdAt: message.createdAt,
-      })),
-    }
-  },
-})
-
-export const createAgentThreadRecord = mutation({
-  args: {
-    userId: v.string(),
-    tableName: v.string(),
-    agentThreadId: v.string(),
-    agentName: v.string(),
-    title: v.string(),
-    createdAt: v.number(),
-    lastMode: v.union(v.literal('query'), v.literal('analysis')),
-  },
-  handler: async (
-    ctx,
-    { userId, tableName, agentThreadId, agentName, title, createdAt, lastMode },
-  ) => {
-    const threadId = await ctx.db.insert('agentThreads', {
-      userId,
-      tableName,
-      agentThreadId,
-      agentName,
-      title,
-      createdAt,
-      updatedAt: createdAt,
-      lastMessageAt: createdAt,
-      lastMessageSummary: '',
-      lastMode,
-    })
-    return await ctx.db.get(threadId)
-  },
-})
-
-export const updateAgentThreadRecord = mutation({
-  args: {
-    threadId: v.id('agentThreads'),
-    title: v.optional(v.string()),
-    agentName: v.optional(v.string()),
-    updatedAt: v.optional(v.number()),
-    lastMessageAt: v.optional(v.number()),
-    lastMessageSummary: v.optional(v.string()),
-    lastMode: v.optional(v.union(v.literal('query'), v.literal('analysis'))),
-  },
-  handler: async (
-    ctx,
-    {
-      threadId,
-      title,
-      agentName,
-      updatedAt,
-      lastMessageAt,
-      lastMessageSummary,
-      lastMode,
-    },
-  ) => {
-    const patch: Record<string, any> = {}
-    if (title !== undefined) patch.title = title
-    if (agentName !== undefined) patch.agentName = agentName
-    if (updatedAt !== undefined) patch.updatedAt = updatedAt
-    if (lastMessageAt !== undefined) patch.lastMessageAt = lastMessageAt
-    if (lastMessageSummary !== undefined) {
-      patch.lastMessageSummary = lastMessageSummary
-    }
-    if (lastMode !== undefined) patch.lastMode = lastMode
-    if (Object.keys(patch).length > 0) {
-      await ctx.db.patch(threadId, patch)
-    }
-  },
-})
-
-export const insertAgentMessageRecord = mutation({
-  args: {
-    threadId: v.id('agentThreads'),
-    role: v.union(v.literal('user'), v.literal('assistant')),
-    userId: v.optional(v.string()),
-    agentName: v.optional(v.string()),
-    mode: v.union(v.literal('query'), v.literal('analysis')),
-    content: v.string(),
-    description: v.optional(v.string()),
-    commands: v.optional(v.array(v.string())),
-    toolSteps: v.optional(
-      v.array(
-        v.object({
-          tool: v.string(),
-          args: v.any(),
-          result: v.any(),
-        }),
-      ),
-    ),
-    createdAt: v.number(),
-  },
-  handler: async (ctx, args) => {
-    await ctx.db.insert('agentMessages', args)
   },
 })

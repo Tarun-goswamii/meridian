@@ -95,15 +95,13 @@ function RouteComponent() {
   const askGemini = useAction(api.table_agent.askGemini)
   const generateInsights = useAction(api.insights.generateInsights)
   const logQuery = useMutation(api.queryLog.logQuery)
-  const threads = useQuery(api.table_agent.listAgentThreads, {
+  const threads = useQuery(api.agent_utils.listAgentThreads, {
     tableName: table,
   })
   const hasInitialisedThreadSelection = useRef(false)
   const threadMessages = useQuery(
-    api.table_agent.getAgentThreadMessages,
-    selectedThreadId
-      ? { agentThreadId: selectedThreadId }
-      : ('skip' as any),
+    api.agent_utils.getAgentThreadMessages,
+    selectedThreadId ? { agentThreadId: selectedThreadId } : ('skip' as any),
   )
   const agentMessages = threadMessages?.messages ?? []
   const threadsList = threads ?? []

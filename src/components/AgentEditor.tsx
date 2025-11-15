@@ -64,6 +64,7 @@ function MessagePair({ user, assistant }: MessagePairProps) {
   const [toolStepsExpanded, setToolStepsExpanded] = useState<
     Record<number, boolean>
   >({})
+  const [toolStepsCollapsed, setToolStepsCollapsed] = useState(true)
 
   // Initialize all tool steps as expanded by default when assistant.toolSteps changes
   useEffect(() => {
@@ -85,31 +86,31 @@ function MessagePair({ user, assistant }: MessagePairProps) {
 
   return (
     <Box
-      p="sm"
+      px="md"
+      py={10}
       style={{
-        backgroundColor: 'rgba(59, 130, 246, 0.08)',
-        backdropFilter: 'blur(10px)',
-        WebkitBackdropFilter: 'blur(10px)',
-        borderRadius: 'var(--mantine-radius-md)',
-        border: '1px solid rgba(0, 0, 0, 0.15)',
-        overflow: 'hidden',
+        backgroundColor: 'rgba(246,248,252,1)',
+        borderRadius: 10,
+        border: '1px solid #E3E7ED',
+        marginBottom: 0,
       }}
     >
-      <Stack gap="xs">
+      <Stack gap={4}>
         {/* User Query */}
-        <Box>
-          <Group gap="xs" mb={4}>
-            <Avatar size="xs" radius="xl" color="blue" variant="light">
-              <IconUser size={12} />
+        <Box mb={4}>
+          <Group gap={8} mb={2} align="center">
+            <Avatar size={22} radius="xl" color="blue" variant="filled">
+              <IconUser size={14} />
             </Avatar>
-            <Text size="xs" fw={500} c="dimmed">
+            <Text size="sm" fw={600} c="blue.7">
               You
             </Text>
           </Group>
           <Text
-            size="xs"
-            style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}
-            pl={24}
+            size="sm"
+            style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}
+            pl={36}
+            c="gray.7"
           >
             {user.content}
           </Text>
@@ -118,128 +119,140 @@ function MessagePair({ user, assistant }: MessagePairProps) {
         {/* Assistant Response */}
         {assistant && (
           <>
-            <Divider style={{ borderColor: 'rgba(0, 0, 0, 0.1)' }} />
+            <Divider my={4} style={{ borderColor: '#ECF1F7' }} />
             <Box>
-              <Group gap="xs" mb={4}>
-                <Avatar size="xs" radius="xl" color="violet" variant="light">
-                  <IconSparkles size={12} />
+              <Group gap={8} mb={2} align="center">
+                <Avatar size={22} radius="xl" color="violet" variant="filled">
+                  <IconSparkles size={14} />
                 </Avatar>
-                <Text size="xs" fw={500} c="dimmed">
+                <Text size="sm" fw={600} c="violet.7">
                   Agent
                 </Text>
               </Group>
               <Text
-                size="xs"
-                style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}
-                pl={24}
+                size="sm"
+                style={{ whiteSpace: 'pre-wrap', lineHeight: 1.6 }}
+                pl={36}
+                c="gray.8"
               >
                 <CustomMarkdown>{assistant.content}</CustomMarkdown>
               </Text>
 
               {/* Tool Steps */}
               {assistant.toolSteps && assistant.toolSteps.length > 0 && (
-                <Box mt="xs" pl={24}>
-                  <Group gap="xs" mb={4}>
-                    <IconCode
-                      size={12}
-                      style={{ color: 'var(--mantine-color-blue-6)' }}
-                    />
-                    <Text size="xs" c="blue" fw={500}>
+                <Box mt={10} pl={36}>
+                  <Group
+                    gap={6}
+                    mb={4}
+                    style={{ cursor: 'pointer' }}
+                    onClick={() => setToolStepsCollapsed(!toolStepsCollapsed)}
+                  >
+                    <ActionIcon size="xs" variant="subtle" color="blue">
+                      {toolStepsCollapsed ? (
+                        <IconChevronDown size={14} />
+                      ) : (
+                        <IconChevronUp size={14} />
+                      )}
+                    </ActionIcon>
+                    <IconCode size={15} style={{ color: '#3772FF' }} />
+                    <Text size="xs" c="blue.6" fw={600}>
                       Tool Usage ({assistant.toolSteps.length})
                     </Text>
                   </Group>
-                  <Stack gap="xs">
-                    {assistant.toolSteps.map((step, idx) => (
-                      <Box
-                        key={idx}
-                        p="xs"
-                        style={{
-                          backgroundColor: 'rgba(59, 130, 246, 0.08)',
-                          borderRadius: 'var(--mantine-radius-xs)',
-                          border: '1px solid rgba(59, 130, 246, 0.2)',
-                        }}
-                      >
-                        <Group
-                          gap="xs"
-                          align="center"
-                          style={{ cursor: 'pointer' }}
-                          onClick={() => handleToggleToolStep(idx)}
+                  <Collapse in={!toolStepsCollapsed}>
+                    <Stack gap={6}>
+                      {assistant.toolSteps.map((step, idx) => (
+                        <Box
+                          key={idx}
+                          p={7}
+                          style={{
+                            backgroundColor: '#F5F8FE',
+                            borderRadius: 7,
+                            border: '1px solid #E3E7ED',
+                          }}
                         >
-                          <ActionIcon size="xs" variant="subtle" color="blue">
-                            {toolStepsExpanded[idx] ? (
-                              <IconChevronUp size={14} />
-                            ) : (
-                              <IconChevronDown size={14} />
+                          <Group
+                            gap={7}
+                            align="center"
+                            style={{ cursor: 'pointer' }}
+                            onClick={() => handleToggleToolStep(idx)}
+                          >
+                            <ActionIcon size="xs" variant="subtle" color="blue">
+                              {toolStepsExpanded[idx] ? (
+                                <IconChevronUp size={14} />
+                              ) : (
+                                <IconChevronDown size={14} />
+                              )}
+                            </ActionIcon>
+                            <Text size="xs" fw={600} c="blue.6" mb={3}>
+                              {step.tool}
+                            </Text>
+                          </Group>
+                          <Collapse
+                            in={toolStepsExpanded[idx]}
+                            transitionDuration={120}
+                          >
+                            {step.args && (
+                              <Box mb={4} mt={2}>
+                                <Text size="xs" c="dimmed" fw={500} mb={2}>
+                                  Args:
+                                </Text>
+                                <Box
+                                  component="pre"
+                                  style={{
+                                    background: 'rgba(0,0,0,0.03)',
+                                    borderRadius: 6,
+                                    padding: 8,
+                                    fontSize: 12,
+                                    fontFamily:
+                                      'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
+                                    whiteSpace: 'pre-wrap',
+                                    wordBreak: 'break-word',
+                                    margin: 0,
+                                  }}
+                                >
+                                  {JSON.stringify(step.args, null, 2)}
+                                </Box>
+                              </Box>
                             )}
-                          </ActionIcon>
-                          <Text size="xs" fw={500} c="blue" mb={4}>
-                            {step.tool}
-                          </Text>
-                        </Group>
-                        <Collapse
-                          in={toolStepsExpanded[idx]}
-                          transitionDuration={120}
-                        >
-                          {step.args && (
-                            <Box mb={4}>
-                              <Text size="xs" c="dimmed" fw={500} mb={2}>
-                                Args:
-                              </Text>
-                              <Box
-                                component="pre"
-                                style={{
-                                  background: 'rgba(0,0,0,0.04)',
-                                  borderRadius: 6,
-                                  padding: 8,
-                                  fontSize: 12,
-                                  fontFamily:
-                                    'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
-                                  whiteSpace: 'pre-wrap',
-                                  wordBreak: 'break-word',
-                                  margin: 0,
-                                }}
-                              >
-                                {JSON.stringify(step.args, null, 2)}
+                            {step.result && (
+                              <Box mt={2}>
+                                <Text size="xs" c="dimmed" fw={500} mb={2}>
+                                  Result:
+                                </Text>
+                                <Box
+                                  component="pre"
+                                  style={{
+                                    background: 'rgba(0,0,0,0.03)',
+                                    borderRadius: 6,
+                                    padding: 8,
+                                    fontSize: 12,
+                                    fontFamily:
+                                      'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
+                                    whiteSpace: 'pre-wrap',
+                                    wordBreak: 'break-word',
+                                    margin: 0,
+                                    maxHeight: 200,
+                                    overflowY: 'auto',
+                                  }}
+                                >
+                                  {JSON.stringify(step.result, null, 2)}
+                                </Box>
                               </Box>
-                            </Box>
-                          )}
-                          {step.result && (
-                            <Box>
-                              <Text size="xs" c="dimmed" fw={500} mb={2}>
-                                Result:
-                              </Text>
-                              <Box
-                                component="pre"
-                                style={{
-                                  background: 'rgba(0,0,0,0.04)',
-                                  borderRadius: 6,
-                                  padding: 8,
-                                  fontSize: 12,
-                                  fontFamily:
-                                    'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
-                                  whiteSpace: 'pre-wrap',
-                                  wordBreak: 'break-word',
-                                  margin: 0,
-                                  maxHeight: 200,
-                                  overflowY: 'auto',
-                                }}
-                              >
-                                {JSON.stringify(step.result, null, 2)}
-                              </Box>
-                            </Box>
-                          )}
-                        </Collapse>
-                      </Box>
-                    ))}
-                  </Stack>
+                            )}
+                          </Collapse>
+                        </Box>
+                      ))}
+                    </Stack>
+                  </Collapse>
                 </Box>
               )}
 
               {/* Collapsible Commands */}
               {assistant.commands && assistant.commands.length > 0 && (
-                <Box mt="xs" pl={24}>
+                <Box mt={10} pl={36}>
                   <Group
-                    gap="xs"
+                    gap={6}
                     style={{ cursor: 'pointer' }}
                     onClick={() => setCommandsExpanded(!commandsExpanded)}
                   >
@@ -250,40 +263,37 @@ function MessagePair({ user, assistant }: MessagePairProps) {
                         <IconChevronDown size={14} />
                       )}
                     </ActionIcon>
-                    <Group gap={4}>
-                      <IconCode
-                        size={12}
-                        style={{ color: 'var(--mantine-color-gray-6)' }}
-                      />
-                      <Text size="xs" c="dimmed" fw={500}>
+                    <Group gap={4} align="center">
+                      <IconCode size={13} style={{ color: '#ABB4C6' }} />
+                      <Text size="xs" c="gray.7" fw={600}>
                         SQL Commands ({assistant.commands.length})
                       </Text>
                     </Group>
                   </Group>
                   <Collapse in={commandsExpanded}>
                     <Box
-                      mt="xs"
-                      p="xs"
+                      mt={8}
+                      p={7}
                       style={{
-                        backgroundColor: 'rgba(0, 0, 0, 0.03)',
-                        borderRadius: 'var(--mantine-radius-sm)',
-                        border: '1px solid rgba(0, 0, 0, 0.08)',
-                        maxHeight: '200px',
+                        backgroundColor: '#F7FAFB',
+                        borderRadius: 6,
+                        border: '1px solid #E3E7ED',
+                        maxHeight: '174px',
                         overflowY: 'auto',
                       }}
                     >
-                      <Stack gap="xs">
+                      <Stack gap={5}>
                         {assistant.commands.map((cmd, idx) => (
                           <Box
                             key={idx}
-                            p="xs"
+                            p={7}
                             style={{
-                              backgroundColor: 'rgba(255, 255, 255, 0.5)',
-                              borderRadius: 'var(--mantine-radius-xs)',
-                              border: '1px solid rgba(0, 0, 0, 0.05)',
+                              backgroundColor: '#FFF',
+                              borderRadius: 6,
+                              border: '1px solid #F0F0F1',
                             }}
                           >
-                            <Group gap="xs" align="flex-start">
+                            <Group gap={7} align="flex-start">
                               <Badge
                                 size="xs"
                                 variant="dot"
@@ -291,7 +301,7 @@ function MessagePair({ user, assistant }: MessagePairProps) {
                                 style={{
                                   minWidth: 20,
                                   textAlign: 'center',
-                                  fontSize: '10px',
+                                  fontSize: 10,
                                 }}
                               >
                                 {idx + 1}
@@ -306,7 +316,7 @@ function MessagePair({ user, assistant }: MessagePairProps) {
                                   flex: 1,
                                   wordBreak: 'break-word',
                                 }}
-                                c="dimmed"
+                                c="gray.7"
                               >
                                 {cmd}
                               </Text>
@@ -364,9 +374,22 @@ export function AgentEditor({
   onModeChange,
 }: AgentEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const scrollViewportRef = useRef<HTMLDivElement>(null)
   const [queueExpanded, setQueueExpanded] = useState(false)
 
   const remainingCommands = commandQueue.slice(currentCommandIndex + 1)
+
+  // Scroll to bottom after a new message is added or on send
+  useEffect(() => {
+    if (scrollViewportRef.current) {
+      requestAnimationFrame(() => {
+        scrollViewportRef.current!.scrollTo({
+          top: scrollViewportRef.current!.scrollHeight,
+          behavior: 'smooth',
+        })
+      })
+    }
+  }, [messages.length])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -388,17 +411,20 @@ export function AgentEditor({
       p={0}
       style={{
         width: '100%',
-        minWidth: 320,
-        maxWidth: '100%',
+        height: '100%',
         display: 'flex',
         flexDirection: 'column',
-        height: '100%',
-        backgroundColor: 'rgba(255, 255, 255, 0.7)',
-        backdropFilter: 'blur(20px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-        border: '1px solid rgba(0, 0, 0, 0.3)',
+        background: 'rgba(255, 255, 255, 0.9)',
+        backdropFilter: 'blur(10px)',
+        WebkitBackdropFilter: 'blur(10px)',
         overflow: 'hidden',
-        borderRadius: 'var(--mantine-radius-lg)',
+        border: '1px solid rgba(0, 0, 0, 0.1)',
+        borderRadius: 'var(--mantine-radius-md)',
+        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
+        minWidth: 0,
+        minHeight: 0,
+        maxWidth: '100%',
+        maxHeight: '100%',
       }}
     >
       <Stack
@@ -407,30 +433,35 @@ export function AgentEditor({
       >
         {/* Header */}
         <Box
-          p="md"
+          px={18}
+          py={11}
           style={{
-            borderBottom: '1px solid rgba(255, 255, 255, 0.2)',
-            backgroundColor: 'rgba(255, 255, 255, 0.3)',
-            backdropFilter: 'blur(10px)',
-            WebkitBackdropFilter: 'blur(10px)',
+            borderBottom: '1px solid #E3E7ED',
+            background: 'white',
+            position: 'sticky',
+            top: 0,
+            zIndex: 2,
+            minHeight: 0,
+            minWidth: 0,
           }}
         >
-          <Stack gap="xs">
-            <Group justify="space-between" align="center">
-              <Group gap="xs">
-                <IconSparkles
-                  size={20}
-                  style={{ color: 'var(--mantine-color-blue-6)' }}
-                />
-                <Text fw={600} size="sm">
+          <Stack gap={4}>
+            <Group justify="space-between" align="center" mb={1}>
+              <Group gap={8}>
+                <IconSparkles size={19} style={{ color: '#3772FF' }} />
+                <Text fw={600} size="md" style={{ letterSpacing: -0.5 }}>
                   AI Agent
                 </Text>
                 {commandQueue.length > 0 && (
                   <Badge
-                    size="xs"
+                    size="sm"
                     variant="light"
                     color="blue"
-                    style={{ fontWeight: 500 }}
+                    style={{
+                      fontWeight: 500,
+                      background: '#F5F8FE',
+                      border: 0,
+                    }}
                   >
                     {currentCommandIndex + 1} / {commandQueue.length}
                   </Badge>
@@ -443,9 +474,9 @@ export function AgentEditor({
                   onClick={() => setQueueExpanded(!queueExpanded)}
                 >
                   {queueExpanded ? (
-                    <IconChevronUp size={16} />
+                    <IconChevronUp size={18} />
                   ) : (
-                    <IconChevronDown size={16} />
+                    <IconChevronDown size={18} />
                   )}
                 </ActionIcon>
               )}
@@ -468,6 +499,10 @@ export function AgentEditor({
                 ]}
                 size="xs"
                 fullWidth
+                styles={{
+                  root: { maxWidth: 320, marginTop: 3 },
+                  label: { fontWeight: 500, fontSize: 13 },
+                }}
               />
             )}
             {(threads.length > 0 || onCreateThread) && (
@@ -477,11 +512,11 @@ export function AgentEditor({
                   flexDirection: 'row',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  gap: '1rem',
+                  gap: '0.75rem',
                 }}
               >
                 <Select
-                  size="xs"
+                  size="sm"
                   placeholder={
                     threads.length > 0
                       ? 'Select a conversation'
@@ -501,11 +536,14 @@ export function AgentEditor({
                     }
                   }}
                   w="100%"
-                  // searchable
                   clearable
                   allowDeselect
                   disabled={threads.length === 0}
                   nothingFoundMessage="No conversations"
+                  styles={{
+                    input: { fontSize: 13 },
+                    dropdown: { fontSize: 13 },
+                  }}
                 />
                 {onCreateThread && (
                   <Button size="xs" variant="light" onClick={onCreateThread}>
@@ -519,41 +557,38 @@ export function AgentEditor({
 
         {/* Command Queue Status */}
         {remainingCommands.length > 0 && (
-          <Box px="md" pt="xs">
+          <Box px={18} pt={7}>
             <Collapse in={queueExpanded}>
               <Box
-                p="xs"
+                p={9}
                 style={{
-                  backgroundColor: 'rgba(59, 130, 246, 0.08)',
-                  borderRadius: 'var(--mantine-radius-sm)',
-                  border: '1px solid rgba(59, 130, 246, 0.2)',
-                  maxHeight: '120px',
+                  backgroundColor: '#F5F8FE',
+                  borderRadius: 8,
+                  border: '1px solid #E3E7ED',
+                  maxHeight: '100px',
                   overflowY: 'auto',
                 }}
               >
-                <Group gap="xs" mb={4}>
-                  <IconCode
-                    size={14}
-                    style={{ color: 'var(--mantine-color-blue-6)' }}
-                  />
-                  <Text size="xs" fw={500} c="blue">
+                <Group gap={7} mb={3}>
+                  <IconCode size={13} style={{ color: '#3772FF' }} />
+                  <Text size="xs" fw={600} c="blue.7">
                     Remaining ({remainingCommands.length})
                   </Text>
                 </Group>
-                <Stack gap={4}>
+                <Stack gap={3}>
                   {remainingCommands.map((cmd, idx) => {
                     const actualIndex = currentCommandIndex + 1 + idx
                     return (
                       <Box
                         key={idx}
-                        p="xs"
+                        p={8}
                         style={{
-                          backgroundColor: 'rgba(255, 255, 255, 0.6)',
-                          borderRadius: 'var(--mantine-radius-xs)',
-                          border: '1px solid rgba(0, 0, 0, 0.1)',
+                          backgroundColor: '#FFF',
+                          borderRadius: 5,
+                          border: '1px solid #E3E7ED',
                         }}
                       >
-                        <Group gap="xs" align="flex-start">
+                        <Group gap={6} align="flex-start">
                           <Badge
                             size="xs"
                             variant="dot"
@@ -561,7 +596,7 @@ export function AgentEditor({
                             style={{
                               minWidth: 20,
                               textAlign: 'center',
-                              fontSize: '10px',
+                              fontSize: 10,
                             }}
                           >
                             {actualIndex + 1}
@@ -574,7 +609,7 @@ export function AgentEditor({
                               flex: 1,
                               wordBreak: 'break-word',
                             }}
-                            c="dimmed"
+                            c="gray.7"
                           >
                             {cmd.length > 60 ? cmd.slice(0, 60) + '…' : cmd}
                           </Text>
@@ -590,29 +625,39 @@ export function AgentEditor({
 
         {/* Messages Area */}
         <ScrollArea
-          style={{ flex: 1, minHeight: 0 }}
-          p="md"
+          style={{
+            flex: 1,
+            minHeight: 0,
+            minWidth: 0,
+            maxHeight: '100%',
+            maxWidth: '100vw',
+            background: 'none',
+            paddingLeft: 0,
+            paddingRight: 0,
+          }}
+          p={0}
           type="auto"
           offsetScrollbars
+          viewportRef={scrollViewportRef}
         >
-          <Stack gap="md">
+          <Stack gap={13} px={18} py={14}>
             {messages.length === 0 && !description && (
               <Box
-                p="lg"
+                py="lg"
                 style={{
                   textAlign: 'center',
-                  color: 'var(--mantine-color-gray-6)',
+                  color: '#AAB4C6',
                 }}
               >
                 <IconSparkles
-                  size={32}
+                  size={30}
                   style={{
-                    color: 'var(--mantine-color-gray-4)',
+                    color: '#E4EAF5',
                     marginBottom: 8,
                     margin: '0 auto 8px',
                   }}
                 />
-                <Text size="sm" c="dimmed">
+                <Text size="sm" c="gray.5">
                   Start a conversation with the AI agent
                 </Text>
               </Box>
@@ -640,14 +685,12 @@ export function AgentEditor({
 
             {description && messages.length === 0 && (
               <Box
-                p="sm"
+                p={10}
                 style={{
-                  backgroundColor: 'rgba(59, 130, 246, 0.15)',
-                  backdropFilter: 'blur(10px)',
-                  WebkitBackdropFilter: 'blur(10px)',
-                  borderRadius: 'var(--mantine-radius-md)',
-                  border: '1px solid rgba(59, 130, 246, 0.2)',
-                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
+                  backgroundColor: '#F2F8FF',
+                  borderRadius: 8,
+                  border: '1px solid #D5E3FF',
+                  boxShadow: '0 1px 4px 0 #e6eefd',
                 }}
               >
                 <Text size="xs" c="dimmed" style={{ lineHeight: 1.5 }}>
@@ -658,8 +701,8 @@ export function AgentEditor({
           </Stack>
         </ScrollArea>
 
-        {error && (
-          <Box px="md" pt="xs">
+        {!!error && (
+          <Box px={18} pt={8}>
             <Alert
               color="red"
               title="Error"
@@ -668,10 +711,8 @@ export function AgentEditor({
               variant="light"
               styles={{
                 root: {
-                  backgroundColor: 'rgba(239, 68, 68, 0.15)',
-                  backdropFilter: 'blur(10px)',
-                  WebkitBackdropFilter: 'blur(10px)',
-                  border: '1px solid rgba(239, 68, 68, 0.2)',
+                  backgroundColor: '#FEEBEB',
+                  border: '1px solid #F9CFCF',
                 },
               }}
             >
@@ -680,19 +721,19 @@ export function AgentEditor({
           </Box>
         )}
 
-        <Divider style={{ borderColor: 'rgba(255, 255, 255, 0.2)' }} />
+        <Divider style={{ borderColor: '#E3E7ED', margin: 0 }} />
 
         {/* Input Area */}
         <Box
-          p="md"
+          px={18}
+          py={10}
           style={{
-            borderTop: '1px solid rgba(255, 255, 255, 0.2)',
-            backgroundColor: 'rgba(255, 255, 255, 0.3)',
-            backdropFilter: 'blur(10px)',
-            WebkitBackdropFilter: 'blur(10px)',
+            borderTop: '1px solid #E3E7ED',
+            background: 'white',
+            minHeight: 0,
           }}
         >
-          <Stack gap="xs">
+          <Stack gap={7}>
             <Textarea
               ref={textareaRef}
               value={input}
@@ -702,26 +743,25 @@ export function AgentEditor({
                 input: {
                   fontSize: '13px',
                   lineHeight: 1.5,
-                  padding: '10px 12px',
-                  backgroundColor: 'rgba(246, 246, 246, 0.6)',
-                  backdropFilter: 'blur(10px)',
-                  WebkitBackdropFilter: 'blur(10px)',
-                  border: '1px solid rgba(0, 0, 0, 0.1)',
-                  borderRadius: '12px',
-                  minHeight: '60px',
-                  maxHeight: '240px',
+                  padding: '10px 13px',
+                  backgroundColor: '#F6F7FA',
+                  border: '1px solid #E3E7ED',
+                  borderRadius: '9px',
+                  minHeight: '53px',
+                  maxHeight: '180px',
                   resize: 'none',
                   overflow: 'auto',
+                  boxShadow: 'none',
                   '&:focus': {
-                    borderColor: 'rgba(59, 130, 246, 0.5)',
-                    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-                    boxShadow: '0 4px 12px rgba(59, 130, 246, 0.2)',
+                    borderColor: '#3772FF',
+                    backgroundColor: '#fff',
                   },
+                  transition: 'border-color 0.18s, background 0.20s',
                 },
               }}
             />
             <Group justify="space-between" align="center">
-              <Text size="xs" c="dimmed">
+              <Text size="xs" c="gray.6">
                 Ctrl+Enter to send
               </Text>
               <Button
@@ -731,6 +771,12 @@ export function AgentEditor({
                 disabled={!input.trim()}
                 size="xs"
                 variant="filled"
+                style={{
+                  borderRadius: 6,
+                  boxShadow: '0 1px 4px 0 #E3E7ED',
+                  fontWeight: 600,
+                  fontSize: 13,
+                }}
               >
                 Send
               </Button>
