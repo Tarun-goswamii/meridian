@@ -9,7 +9,7 @@ import { useAction, useMutation, useQuery } from 'convex/react'
 import { api } from '@/convex/_generated/api'
 import { useReactTable, getCoreRowModel } from '@tanstack/react-table'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Text, Group, Box, Divider } from '@mantine/core'
+import { Text, Group, Box, Divider, Tabs, ScrollArea } from '@mantine/core'
 import { QueryEditor } from '~/components/QueryEditor'
 import type { Insight } from '~/components/InsightsPanel'
 import { useDidUpdate } from '@mantine/hooks'
@@ -22,6 +22,11 @@ import { DataTable } from '~/components/DataTable'
 import { TableSidebar } from '~/components/TableSidebar'
 import { useTableColumns } from '~/components/useTableColumns'
 import { StatisticalFindingsPanel } from '~/components/StatisticalFindingsPanel'
+import {
+  ChartCanvas,
+  type ChartItem,
+  type ChartConfig,
+} from '~/components/ChartCanvas'
 
 type TableData = {
   columns: { name: string; type: string }[]
@@ -84,10 +89,18 @@ function RouteComponent() {
   const [insightsError, setInsightsError] = useState<string | null>(null)
   const [statisticalFindings, setStatisticalFindings] = useState<any[]>([])
 
+  // Charts state
+  const [charts, setCharts] = useState<ChartItem[]>([])
+
   // Panel toggle state
   const [activePanel, setActivePanel] = useState<
     'agent' | 'insights' | 'history'
   >('agent')
+
+  // Tab state for main content area
+  const [activeTab, setActiveTab] = useState<'table' | 'statistics' | 'charts'>(
+    'table',
+  )
 
   const [name] = useState(() => 'User ' + Math.floor(Math.random() * 10000))
   const presenceState = usePresence(api.presence, 'my-chat-room', name)
@@ -157,6 +170,257 @@ function RouteComponent() {
       setAgentDescription(latestDescription)
     }
   }, [selectedThreadId, threadMessages])
+
+  // Track previous chart IDs to prevent infinite loops
+  const previousChartIdsRef = useRef<string>('')
+
+  // Extract charts from tool steps in messages using useMemo to prevent infinite loops
+  const extractedCharts = useMemo(() => {
+    const charts: ChartItem[] = []
+    let chartIndex = 0
+
+    agentMessages.forEach((message) => {
+      if (message.role === 'assistant' && message.toolSteps) {
+        message.toolSteps.forEach((step, stepIndex) => {
+          if (
+            step.tool === 'createChart' &&
+            step.finished &&
+            step.result?.success &&
+            step.result?.chart
+          ) {
+            const chartConfig: ChartConfig = step.result.chart
+            // Generate unique ID based on message and step
+            const chartId = `chart-${message.createdAt || Date.now()}-${stepIndex}`
+
+            // Check if chart already exists
+            if (!charts.find((c) => c.id === chartId)) {
+              // Better initial positioning: 2 columns, with proper spacing
+              const CHART_WIDTH = 480
+              const CHART_HEIGHT = 370
+              const GAP = 20
+              const PADDING = 20
+
+              const col = chartIndex % 2
+              const row = Math.floor(chartIndex / 2)
+
+              charts.push({
+                id: chartId,
+                config: chartConfig,
+                position: {
+                  x: col * (CHART_WIDTH + GAP) + PADDING,
+                  y: row * (CHART_HEIGHT + GAP) + PADDING,
+                },
+              })
+              chartIndex++
+            }
+          }
+        })
+      }
+    })
+
+    return charts
+  }, [agentMessages])
+
+  // Track previous data version to detect changes
+  const previousDataVersionRef = useRef<string>('')
+  // Track charts in a ref to avoid dependency issues
+  const chartsRef = useRef<ChartItem[]>([])
+
+  // Update charts ref when charts state changes
+  useEffect(() => {
+    chartsRef.current = charts
+  }, [charts])
+
+  // Update charts state only when extracted charts change
+  useEffect(() => {
+    const newChartIds = extractedCharts
+      .map((c) => c.id)
+      .sort()
+      .join(',')
+
+    // Only update if the chart IDs have actually changed
+    if (previousChartIdsRef.current !== newChartIds) {
+      previousChartIdsRef.current = newChartIds
+
+      // Preserve positions of existing charts
+      setCharts((prevCharts) => {
+        const existingChartsMap = new Map(prevCharts.map((c) => [c.id, c]))
+        const updatedCharts = extractedCharts.map((chart) => {
+          const existing = existingChartsMap.get(chart.id)
+          return existing ? existing : chart
+        })
+        chartsRef.current = updatedCharts
+        return updatedCharts
+      })
+    }
+  }, [extractedCharts])
+
+  // Re-execute chart queries when table data changes
+  useEffect(() => {
+    // Create a version string from current data to detect changes
+    const currentDataVersion = JSON.stringify({
+      rowCount: data.rows.length,
+      columnCount: data.columns.length,
+      // Include a hash of first few rows to detect data changes
+      sampleHash: JSON.stringify(data.rows.slice(0, 3)),
+    })
+
+    // Only update charts if data has actually changed
+    if (previousDataVersionRef.current === currentDataVersion) {
+      return
+    }
+
+    previousDataVersionRef.current = currentDataVersion
+
+    // Re-execute queries for all charts that have queries
+    const updateCharts = async () => {
+      // Use ref to get current charts without causing dependency issues
+      const currentCharts = chartsRef.current
+      const chartsWithQueries = currentCharts.filter(
+        (chart) => chart.config.query,
+      )
+
+      if (chartsWithQueries.length === 0) {
+        return
+      }
+
+      // Re-execute all chart queries in parallel
+      const updatedCharts = await Promise.all(
+        chartsWithQueries.map(async (chart) => {
+          try {
+            if (!chart.config.query) {
+              return chart
+            }
+
+            // Re-execute the chart's query
+            const result = await queryDuckDB({ data: chart.config.query })
+            const parsed = JSON.parse(result) as TableData
+
+            if (!parsed.rows || parsed.rows.length === 0) {
+              return chart // Keep existing chart if query returns no data
+            }
+
+            // Re-analyze data structure (similar to createChart tool logic)
+            const columns = parsed.columns || []
+            const rows = parsed.rows || []
+
+            const numericColumns = columns.filter((col) => {
+              if (!col.type) return false
+              const type = col.type.toLowerCase()
+              return (
+                type.includes('int') ||
+                type.includes('float') ||
+                type.includes('double') ||
+                type.includes('decimal') ||
+                type.includes('numeric') ||
+                type.includes('real')
+              )
+            })
+
+            const stringColumns = columns.filter((col) => {
+              if (!col.type) return false
+              const type = col.type.toLowerCase()
+              return (
+                type.includes('varchar') ||
+                type.includes('text') ||
+                type.includes('string') ||
+                type.includes('char')
+              )
+            })
+
+            // Determine axis keys (preserve original if possible)
+            let xAxisKey = chart.config.xAxisKey
+            let yAxisKey = chart.config.yAxisKey
+
+            // Verify axis keys still exist, otherwise recalculate
+            const xColExists = columns.some((col) => col.name === xAxisKey)
+            const yColExists = columns.some((col) => col.name === yAxisKey)
+
+            if (!xColExists && stringColumns.length > 0) {
+              xAxisKey = stringColumns[0].name
+            } else if (!xColExists && numericColumns.length > 0) {
+              xAxisKey = numericColumns[0].name
+            }
+
+            if (!yColExists && numericColumns.length > 0) {
+              const yCol =
+                numericColumns.find((col) => col.name !== xAxisKey) ||
+                numericColumns[0]
+              yAxisKey = yCol.name
+            }
+
+            // Prepare updated data
+            const chartData = rows.map((row: any) => {
+              const entry: any = {}
+              columns.forEach((col) => {
+                entry[col.name] = row[col.name]
+              })
+              return entry
+            })
+
+            // Update series configuration
+            const series: Array<{ name: string; color: string }> = []
+            if (
+              chart.config.type === 'line' ||
+              chart.config.type === 'area' ||
+              chart.config.type === 'bar'
+            ) {
+              numericColumns.forEach((col, idx) => {
+                if (col.name !== xAxisKey) {
+                  const colors = [
+                    'blue',
+                    'green',
+                    'red',
+                    'yellow',
+                    'purple',
+                    'orange',
+                    'cyan',
+                    'pink',
+                  ]
+                  series.push({
+                    name: col.name,
+                    color: colors[idx % colors.length],
+                  })
+                }
+              })
+            }
+
+            // Return updated chart with new data
+            return {
+              ...chart,
+              config: {
+                ...chart.config,
+                data: chartData,
+                dataKey: xAxisKey,
+                xAxisKey: xAxisKey,
+                yAxisKey: yAxisKey,
+                series: series.length > 0 ? series : chart.config.series,
+                columns: columns.map((col) => ({
+                  name: col.name,
+                  type: col.type,
+                })),
+              },
+            }
+          } catch (error) {
+            console.error(`Error updating chart ${chart.id}:`, error)
+            return chart // Return original chart on error
+          }
+        }),
+      )
+
+      // Update charts state with refreshed data
+      setCharts((prevCharts) => {
+        const updatedMap = new Map(updatedCharts.map((c) => [c.id, c]))
+        const newCharts = prevCharts.map(
+          (chart) => updatedMap.get(chart.id) || chart,
+        )
+        chartsRef.current = newCharts
+        return newCharts
+      })
+    }
+
+    updateCharts()
+  }, [data]) // Only depend on data, not charts
 
   const handleExecuteQuery = async () => {
     setIsExecuting(true)
@@ -517,48 +781,91 @@ function RouteComponent() {
               onVisibilityChange={setColumnVisibility}
             />
             <Divider mb="xl" style={{ borderColor: 'rgba(0, 0, 0, 0.06)' }} />
-            <DataTable
-              table={reactTable}
-              visibleColumnsCount={visibleColumns.length}
-            />
-            <StatisticalFindingsPanel findings={statisticalFindings} />
-            <Group
-              justify="space-between"
-              align="center"
-              mt="lg"
-              pt="md"
-              style={{ borderTop: '1px solid rgba(0, 0, 0, 0.06)' }}
-              wrap="nowrap"
+
+            <Tabs
+              value={activeTab}
+              onChange={(value) =>
+                setActiveTab(value as 'table' | 'statistics' | 'charts')
+              }
             >
-              <Group>
-                <Text
-                  size="xs"
-                  c="gray.6"
-                  style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}
+              <Tabs.List>
+                <Tabs.Tab value="table">Data Table</Tabs.Tab>
+                <Tabs.Tab value="statistics">Statistics</Tabs.Tab>
+                <Tabs.Tab value="charts">Charts</Tabs.Tab>
+              </Tabs.List>
+
+              <Tabs.Panel value="table" pt="md">
+                <DataTable
+                  table={reactTable}
+                  visibleColumnsCount={visibleColumns.length}
+                />
+                <Group
+                  justify="space-between"
+                  align="center"
+                  mt="lg"
+                  pt="md"
+                  style={{ borderTop: '1px solid rgba(0, 0, 0, 0.06)' }}
+                  wrap="nowrap"
                 >
-                  Displaying {paginatedRows.length.toLocaleString()} of{' '}
-                  {data.rows.length.toLocaleString()} row
-                  {data.rows.length === 1 ? '' : 's'}
-                </Text>
-                <Text
-                  size="xs"
-                  c="gray.5"
+                  <Group>
+                    <Text
+                      size="xs"
+                      c="gray.6"
+                      style={{
+                        fontFamily: 'system-ui, -apple-system, sans-serif',
+                      }}
+                    >
+                      Displaying {paginatedRows.length.toLocaleString()} of{' '}
+                      {data.rows.length.toLocaleString()} row
+                      {data.rows.length === 1 ? '' : 's'}
+                    </Text>
+                    <Text
+                      size="xs"
+                      c="gray.5"
+                      style={{
+                        fontFamily:
+                          'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
+                      }}
+                    >
+                      {visibleColumns.length} × {data.rows.length}
+                    </Text>
+                  </Group>
+                  <PaginationControls
+                    totalRows={data.rows.length}
+                    pageSize={pageSize}
+                    pageIndex={pageIndex}
+                    onPageSizeChange={setPageSize}
+                    onPageIndexChange={setPageIndex}
+                  />
+                </Group>
+              </Tabs.Panel>
+
+              <Tabs.Panel value="statistics" pt="md">
+                <StatisticalFindingsPanel findings={statisticalFindings} />
+              </Tabs.Panel>
+
+              <Tabs.Panel value="charts" pt="md">
+                <ScrollArea
+                  type="auto"
                   style={{
-                    fontFamily:
-                      'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
+                    height: 'calc(100vh - 300px)',
+                    minHeight: 500,
                   }}
                 >
-                  {visibleColumns.length} × {data.rows.length}
-                </Text>
-              </Group>
-              <PaginationControls
-                totalRows={data.rows.length}
-                pageSize={pageSize}
-                pageIndex={pageIndex}
-                onPageSizeChange={setPageSize}
-                onPageIndexChange={setPageIndex}
-              />
-            </Group>
+                  <ChartCanvas
+                    charts={charts}
+                    onRemoveChart={(id) => {
+                      setCharts((prev) => prev.filter((c) => c.id !== id))
+                    }}
+                    onChartMove={(id, position) => {
+                      setCharts((prev) =>
+                        prev.map((c) => (c.id === id ? { ...c, position } : c)),
+                      )
+                    }}
+                  />
+                </ScrollArea>
+              </Tabs.Panel>
+            </Tabs>
           </Box>
         </Box>
 

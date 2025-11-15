@@ -4,14 +4,15 @@
   "sideEffects": false,
   "type": "module",
   "scripts": {
-    "dev": "npx convex dev --once && concurrently -r npm:dev:web npm:dev:convex",
+    "dev": "NODE_OPTIONS='--import ./instrument.server.mjs' vite dev --port 3000",
+    "start": "node --import ./.output/server/instrument.server.mjs .output/server/index.mjs",
     "dev:web": "vite dev",
     "dev:ts": "tsc -b -w",
     "dev:convex": "npx convex dev",
-    "build": "vite build && tsc --noEmit",
-    "start": "node .output/server/index.mjs",
+    "build": "vite build",
     "format": "prettier --write .",
-    "lint": "tsc && eslint .  --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
+    "lint": "tsc && eslint .  --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "prepare": "husky"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^2.0.41",
@@ -22,6 +23,7 @@
     "@convex-dev/presence": "^0.2.1",
     "@convex-dev/react-query": "^0.0.0-alpha.11",
     "@duckdb/node-api": "1.4.1-r.4",
+    "@mantine/charts": "^8.3.8",
     "@mantine/code-highlight": "^8.3.6",
     "@mantine/core": "^8.3.6",
     "@mantine/dates": "^8.3.6",
@@ -32,6 +34,7 @@
     "@mantine/nprogress": "^8.3.6",
     "@mantine/spotlight": "^8.3.6",
     "@mantine/tiptap": "^8.3.6",
+    "@sentry/tanstackstart-react": "^10.25.0",
     "@tabler/icons-react": "^3.35.0",
     "@tanstack/react-query": "^5.89.0",
     "@tanstack/react-router": "^1.132.2",
@@ -49,11 +52,13 @@
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-markdown": "^10.1.0",
+    "recharts": "^3.4.1",
     "simple-statistics": "^7.8.8",
     "zod": "^4.1.12"
   },
   "devDependencies": {
     "@convex-dev/eslint-plugin": "^1.0.0",
+    "@netlify/vite-plugin-tanstack-start": "^1.1.12",
     "@tailwindcss/vite": "^4.1.13",
     "@tanstack/eslint-config": "^0.3.2",
     "@types/node": "^24.9.2",
@@ -61,6 +66,7 @@
     "@types/react-dom": "^19.1.9",
     "@vitejs/plugin-react": "^5.0.3",
     "concurrently": "~9.2.1",
+    "husky": "^9.1.7",
     "postcss": "^8.5.6",
     "postcss-preset-mantine": "^1.18.0",
     "postcss-simple-vars": "^7.0.1",

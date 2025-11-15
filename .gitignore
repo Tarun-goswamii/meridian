@@ -31,3 +31,6 @@ app.config.timestamp_*.js
 .idea
 *.db
 *.db.*
+
+# Local Netlify folder
+.netlify

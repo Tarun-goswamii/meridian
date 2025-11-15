@@ -34,7 +34,12 @@ interface TableSidebarProps {
     content: string
     description?: string
     commands?: string[]
-    toolSteps?: Array<{ tool: string; args: any; result?: any }>
+    toolSteps?: Array<{
+      tool: string
+      args: any
+      result?: any
+      finished: boolean
+    }>
     mode?: 'query' | 'analysis'
     agentName?: string
     createdAt?: number

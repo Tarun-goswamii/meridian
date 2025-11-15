@@ -1,22 +1,41 @@
 import { useAuthActions } from '@convex-dev/auth/react'
-import { Container, Button, Title } from '@mantine/core'
-import { IconBrandGithub } from '@tabler/icons-react'
+import { Button, Card, Container, Stack, Text, Title } from '@mantine/core'
+import { IconBrandGithub, IconDatabase } from '@tabler/icons-react'
 
 export default function Login() {
   const { signIn } = useAuthActions()
+  
   return (
-    <Container size={420} my={80}>
-      <Title ta="center" style={{ fontWeight: 900 }}>
-        Sign in to an account
-      </Title>
-      <Button
-        fullWidth
-        mt={40}
-        onClick={() => void signIn('github', { redirectTo: '/dashboard' })}
-      >
-        <IconBrandGithub />
-        Sign in with GitHub
-      </Button>
+    <Container size={420} py={80}>
+      <Card withBorder shadow="md" radius="md" p="xl">
+        <Stack align="center" gap="lg">
+          <IconDatabase size={48} style={{ color: 'var(--mantine-color-blue-6)' }} />
+          <div style={{ textAlign: 'center' }}>
+            <Title order={2} fw={800} mb="xs">
+              Welcome to Meridian
+            </Title>
+            <Text c="dimmed" mb="xl">
+              Sign in to manage your data and analytics
+            </Text>
+          </div>
+          
+          <Button
+            leftSection={<IconBrandGithub size={20} />}
+            onClick={() => void signIn('github', { redirectTo: '/dashboard' })}
+            size="md"
+            fullWidth
+            variant="outline"
+            color="dark"
+            radius="md"
+          >
+            Continue with GitHub
+          </Button>
+          
+          <Text size="sm" c="dimmed" mt="md">
+            By continuing, you agree to our Terms of Service and Privacy Policy
+          </Text>
+        </Stack>
+      </Card>
     </Container>
   )
 }

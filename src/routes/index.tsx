@@ -57,7 +57,7 @@ function RouteComponent() {
               ta="center"
               style={{ textWrap: 'balance' }}
             >
-              Insite
+              Meridian
             </Title>
           </motion.div>
           <motion.div
@@ -131,7 +131,7 @@ function RouteComponent() {
             <Image
               src="/hero.png"
               radius="sm"
-              alt="Insite Hero"
+              alt="Meridian Hero"
               width={1920}
               height={800}
               style={{ objectFit: 'contain' }}
@@ -142,7 +142,7 @@ function RouteComponent() {
       <Container size="md" px={0} mt="xl">
         <Paper shadow="md" p="xl" radius="lg" maw={700} w="100%" mx="auto">
           <Title order={3} mb="md" ta="center">
-            Why Insite?
+            Why Meridian?
           </Title>
           <List
             spacing="lg"

@@ -50,7 +50,7 @@ export const fetchDuckDBQuery = action({
   args: { query: v.string() },
   handler: async (_, { query }) => {
     const serverUrl =
-      process.env.DUCKDB_SERVER_URL || 'https://de2261a83878.ngrok-free.app'
+      process.env.DUCKDB_SERVER_URL || 'https://28ec673e8f8d.ngrok-free.app'
 
     const response = await fetch(`${serverUrl}/api/duckdb/query`, {
       method: 'POST',
@@ -166,6 +166,180 @@ const getSampleRows: any = createTool({
   },
 })
 
+// Tool to create a chart from data
+const createChart: any = createTool({
+  description:
+    'Create a chart visualization from query results. Use this when the user asks to visualize data, create a chart, or show data graphically. The tool will analyze the data structure and determine the best chart type.',
+  args: z.object({
+    query: z
+      .string()
+      .describe(
+        'The SQL query to execute to get data for the chart. Must be valid DuckDB SQL.',
+      ),
+    chartType: z
+      .enum(['bar', 'line', 'area', 'pie', 'scatter', 'donut'])
+      .optional()
+      .describe(
+        'The type of chart to create. If not specified, will be determined automatically based on data structure.',
+      ),
+    title: z.string().optional().describe('Title for the chart (optional)'),
+    xAxisKey: z
+      .string()
+      .optional()
+      .describe(
+        'Column name to use for X-axis. If not specified, will be determined automatically.',
+      ),
+    yAxisKey: z
+      .string()
+      .optional()
+      .describe(
+        'Column name to use for Y-axis. If not specified, will be determined automatically.',
+      ),
+  }),
+  handler: async (ctx, args) => {
+    try {
+      // Execute query to get data
+      const result = await ctx.runAction(api.table_agent.fetchDuckDBQuery, {
+        query: args.query,
+      })
+
+      if (!result || !result.rows || result.rows.length === 0) {
+        return {
+          success: false,
+          error: 'No data returned from query',
+        }
+      }
+
+      // Handle case where result might be an error
+      if (result.error) {
+        return {
+          success: false,
+          error: result.error,
+        }
+      }
+
+      const columns = result.columns || []
+      const rows = result.rows || []
+
+      // Analyze data structure to determine chart configuration
+      const numericColumns = columns.filter((col: any) => {
+        if (!col.type) return false
+        const type = col.type.toLowerCase()
+        return (
+          type.includes('int') ||
+          type.includes('float') ||
+          type.includes('double') ||
+          type.includes('decimal') ||
+          type.includes('numeric') ||
+          type.includes('real')
+        )
+      })
+
+      const stringColumns = columns.filter((col: any) => {
+        if (!col.type) return false
+        const type = col.type.toLowerCase()
+        return (
+          type.includes('varchar') ||
+          type.includes('text') ||
+          type.includes('string') ||
+          type.includes('char')
+        )
+      })
+
+      // Determine chart type if not specified
+      let chartType = args.chartType
+      if (!chartType) {
+        if (numericColumns.length === 0) {
+          return {
+            success: false,
+            error: 'No numeric columns found for charting',
+          }
+        } else if (numericColumns.length === 1 && stringColumns.length >= 1) {
+          chartType = 'bar'
+        } else if (numericColumns.length >= 2) {
+          chartType = 'line'
+        } else {
+          chartType = 'bar'
+        }
+      }
+
+      // Determine X and Y axis keys
+      let xAxisKey = args.xAxisKey
+      let yAxisKey = args.yAxisKey
+
+      if (!xAxisKey && stringColumns.length > 0) {
+        xAxisKey = stringColumns[0].name
+      } else if (!xAxisKey && numericColumns.length > 0) {
+        xAxisKey = numericColumns[0].name
+      }
+
+      if (!yAxisKey && numericColumns.length > 0) {
+        // Use first numeric column that's not the x-axis
+        const yCol =
+          numericColumns.find((col: any) => col.name !== xAxisKey) ||
+          numericColumns[0]
+        yAxisKey = yCol.name
+      }
+
+      // Prepare data for chart (ensure it's in the right format)
+      const chartData = rows.map((row: any) => {
+        const entry: any = {}
+        columns.forEach((col: any) => {
+          entry[col.name] = row[col.name]
+        })
+        return entry
+      })
+
+      // Determine series configuration for multi-series charts
+      const series: Array<{ name: string; color: string }> = []
+      if (chartType === 'line' || chartType === 'area' || chartType === 'bar') {
+        numericColumns.forEach((col: any, idx: number) => {
+          if (col.name !== xAxisKey) {
+            const colors = [
+              'blue',
+              'green',
+              'red',
+              'yellow',
+              'purple',
+              'orange',
+              'cyan',
+              'pink',
+            ]
+            series.push({
+              name: col.name,
+              color: colors[idx % colors.length],
+            })
+          }
+        })
+      }
+
+      return {
+        success: true,
+        chart: {
+          type: chartType,
+          title: args.title || `Chart: ${xAxisKey} vs ${yAxisKey}`,
+          data: chartData,
+          dataKey: xAxisKey,
+          xAxisKey: xAxisKey,
+          yAxisKey: yAxisKey,
+          series: series.length > 0 ? series : undefined,
+          columns: columns.map((col: any) => ({
+            name: col.name,
+            type: col.type,
+          })),
+          query: args.query, // Store the original query for re-execution
+        },
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : 'Unknown error occurred',
+      }
+    }
+  },
+})
+
 // Query Agent - generates SQL queries
 const query_agent = new Agent(components.agent, {
   name: 'Query Agent',
@@ -193,12 +367,13 @@ You have access to tools that let you:
 - Query DuckDB to read data from tables
 - Get table schemas to understand structure
 - Get sample rows to see example data
+- Create charts to visualize data
 
 When a user asks a question:
 1. Use the available tools to explore the database and gather information
 2. Analyze the data you retrieve
-3. Provide a clear, helpful answer based on your findings
-
+3. If the user asks to visualize data, create a chart, or show data graphically, use the createChart tool
+4. Provide a clear, helpful answer based on your findings
 
 Be thorough but efficient. Use tools strategically to gather the information needed to answer the user's question.
 `,
@@ -208,6 +383,7 @@ Be thorough but efficient. Use tools strategically to gather the information nee
     queryDuckDB,
     getTableSchema,
     getSampleRows,
+    createChart,
   },
 })
 
