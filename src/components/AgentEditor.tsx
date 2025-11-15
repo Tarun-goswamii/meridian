@@ -31,6 +31,7 @@ interface ToolStep {
   tool: string
   args: any
   result?: any
+  finished: boolean
 }
 
 interface AgentThreadSummary {
@@ -66,6 +67,36 @@ function MessagePair({ user, assistant }: MessagePairProps) {
   >({})
   const [toolStepsCollapsed, setToolStepsCollapsed] = useState(true)
 
+  // Inject keyframe animations once
+  useEffect(() => {
+    const styleId = 'tool-animations'
+    if (!document.getElementById(styleId)) {
+      const style = document.createElement('style')
+      style.id = styleId
+      style.textContent = `
+        @keyframes toolPulse {
+          0%, 100% {
+            box-shadow: 0 0 20px rgba(55, 114, 255, 0.3), 0 0 40px rgba(138, 43, 226, 0.2);
+          }
+          50% {
+            box-shadow: 0 0 30px rgba(55, 114, 255, 0.5), 0 0 60px rgba(138, 43, 226, 0.4);
+          }
+        }
+        @keyframes toolPulseDot {
+          0%, 100% {
+            opacity: 1;
+            transform: scale(1);
+          }
+          50% {
+            opacity: 0.6;
+            transform: scale(1.2);
+          }
+        }
+      `
+      document.head.appendChild(style)
+    }
+  }, [])
+
   // Initialize all tool steps as expanded by default when assistant.toolSteps changes
   useEffect(() => {
     if (assistant?.toolSteps) {
@@ -83,6 +114,15 @@ function MessagePair({ user, assistant }: MessagePairProps) {
       [idx]: !prev[idx],
     }))
   }
+
+  // Check if all tool steps are finished
+  const allToolsFinished =
+    assistant?.toolSteps?.every((step) => step.finished) ?? true
+
+  // Find the currently running tool (first one that's not finished)
+  const runningToolIndex = assistant?.toolSteps?.findIndex(
+    (step) => !step.finished,
+  )
 
   return (
     <Box
@@ -141,69 +181,168 @@ function MessagePair({ user, assistant }: MessagePairProps) {
               {/* Tool Steps */}
               {assistant.toolSteps && assistant.toolSteps.length > 0 && (
                 <Box mt={10} pl={36}>
-                  <Group
-                    gap={6}
-                    mb={4}
-                    style={{ cursor: 'pointer' }}
-                    onClick={() => setToolStepsCollapsed(!toolStepsCollapsed)}
-                  >
-                    <ActionIcon size="xs" variant="subtle" color="blue">
-                      {toolStepsCollapsed ? (
-                        <IconChevronDown size={14} />
-                      ) : (
-                        <IconChevronUp size={14} />
-                      )}
-                    </ActionIcon>
-                    <IconCode size={15} style={{ color: '#3772FF' }} />
-                    <Text size="xs" c="blue.6" fw={600}>
-                      Tool Usage ({assistant.toolSteps.length})
-                    </Text>
-                  </Group>
-                  <Collapse in={!toolStepsCollapsed}>
+                  {allToolsFinished ? (
+                    // Show collapsible sections when all tools are finished
+                    <>
+                      <Group
+                        gap={6}
+                        mb={4}
+                        style={{ cursor: 'pointer' }}
+                        onClick={() =>
+                          setToolStepsCollapsed(!toolStepsCollapsed)
+                        }
+                      >
+                        <ActionIcon size="xs" variant="subtle" color="blue">
+                          {toolStepsCollapsed ? (
+                            <IconChevronDown size={14} />
+                          ) : (
+                            <IconChevronUp size={14} />
+                          )}
+                        </ActionIcon>
+                        <IconCode size={15} style={{ color: '#3772FF' }} />
+                        <Text size="xs" c="blue.6" fw={600}>
+                          Tool Usage ({assistant.toolSteps.length})
+                        </Text>
+                      </Group>
+                      <Collapse in={!toolStepsCollapsed}>
+                        <Stack gap={6}>
+                          {assistant.toolSteps.map((step, idx) => (
+                            <Box
+                              key={idx}
+                              p={7}
+                              style={{
+                                backgroundColor: '#F5F8FE',
+                                borderRadius: 7,
+                                border: '1px solid #E3E7ED',
+                              }}
+                            >
+                              <Group
+                                gap={7}
+                                align="center"
+                                style={{ cursor: 'pointer' }}
+                                onClick={() => handleToggleToolStep(idx)}
+                              >
+                                <ActionIcon
+                                  size="xs"
+                                  variant="subtle"
+                                  color="blue"
+                                >
+                                  {toolStepsExpanded[idx] ? (
+                                    <IconChevronUp size={14} />
+                                  ) : (
+                                    <IconChevronDown size={14} />
+                                  )}
+                                </ActionIcon>
+                                <Text size="xs" fw={600} c="blue.6" mb={3}>
+                                  {step.tool}
+                                </Text>
+                              </Group>
+                              <Collapse
+                                in={toolStepsExpanded[idx]}
+                                transitionDuration={120}
+                              >
+                                {step.args && (
+                                  <Box mb={4} mt={2}>
+                                    <Text size="xs" c="dimmed" fw={500} mb={2}>
+                                      Args:
+                                    </Text>
+                                    <Box
+                                      component="pre"
+                                      style={{
+                                        background: 'rgba(0,0,0,0.03)',
+                                        borderRadius: 6,
+                                        padding: 8,
+                                        fontSize: 12,
+                                        fontFamily:
+                                          'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
+                                        whiteSpace: 'pre-wrap',
+                                        wordBreak: 'break-word',
+                                        margin: 0,
+                                      }}
+                                    >
+                                      {JSON.stringify(step.args, null, 2)}
+                                    </Box>
+                                  </Box>
+                                )}
+                                {step.result && (
+                                  <Box mt={2}>
+                                    <Text size="xs" c="dimmed" fw={500} mb={2}>
+                                      Result:
+                                    </Text>
+                                    <Box
+                                      component="pre"
+                                      style={{
+                                        background: 'rgba(0,0,0,0.03)',
+                                        borderRadius: 6,
+                                        padding: 8,
+                                        fontSize: 12,
+                                        fontFamily:
+                                          'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
+                                        whiteSpace: 'pre-wrap',
+                                        wordBreak: 'break-word',
+                                        margin: 0,
+                                        maxHeight: 200,
+                                        overflowY: 'auto',
+                                      }}
+                                    >
+                                      {JSON.stringify(step.result, null, 2)}
+                                    </Box>
+                                  </Box>
+                                )}
+                              </Collapse>
+                            </Box>
+                          ))}
+                        </Stack>
+                      </Collapse>
+                    </>
+                  ) : (
+                    // Show running tool with glowing gradient when tools are in progress
                     <Stack gap={6}>
-                      {assistant.toolSteps.map((step, idx) => (
-                        <Box
-                          key={idx}
-                          p={7}
-                          style={{
-                            backgroundColor: '#F5F8FE',
-                            borderRadius: 7,
-                            border: '1px solid #E3E7ED',
-                          }}
-                        >
-                          <Group
-                            gap={7}
-                            align="center"
-                            style={{ cursor: 'pointer' }}
-                            onClick={() => handleToggleToolStep(idx)}
+                      {runningToolIndex !== undefined &&
+                        runningToolIndex >= 0 && (
+                          <Box
+                            p={10}
+                            style={{
+                              background:
+                                'linear-gradient(135deg, rgba(55, 114, 255, 0.1) 0%, rgba(138, 43, 226, 0.1) 100%)',
+                              borderRadius: 8,
+                              border: '2px solid rgba(55, 114, 255, 0.3)',
+                              boxShadow:
+                                '0 0 20px rgba(55, 114, 255, 0.3), 0 0 40px rgba(138, 43, 226, 0.2)',
+                              animation: 'toolPulse 2s ease-in-out infinite',
+                              position: 'relative',
+                              overflow: 'hidden',
+                            }}
                           >
-                            <ActionIcon size="xs" variant="subtle" color="blue">
-                              {toolStepsExpanded[idx] ? (
-                                <IconChevronUp size={14} />
-                              ) : (
-                                <IconChevronDown size={14} />
-                              )}
-                            </ActionIcon>
-                            <Text size="xs" fw={600} c="blue.6" mb={3}>
-                              {step.tool}
-                            </Text>
-                          </Group>
-                          <Collapse
-                            in={toolStepsExpanded[idx]}
-                            transitionDuration={120}
-                          >
-                            {step.args && (
-                              <Box mb={4} mt={2}>
+                            <Group gap={8} align="center">
+                              <Box
+                                style={{
+                                  width: 8,
+                                  height: 8,
+                                  borderRadius: '50%',
+                                  background:
+                                    'linear-gradient(135deg, #3772FF 0%, #8A2BE2 100%)',
+                                  animation:
+                                    'toolPulseDot 1.5s ease-in-out infinite',
+                                }}
+                              />
+                              <Text size="xs" fw={600} c="blue.7">
+                                Running:{' '}
+                                {assistant.toolSteps[runningToolIndex].tool}
+                              </Text>
+                            </Group>
+                            {assistant.toolSteps[runningToolIndex].args && (
+                              <Box mt={6}>
                                 <Text size="xs" c="dimmed" fw={500} mb={2}>
                                   Args:
                                 </Text>
                                 <Box
                                   component="pre"
                                   style={{
-                                    background: 'rgba(0,0,0,0.03)',
+                                    background: 'rgba(255, 255, 255, 0.5)',
                                     borderRadius: 6,
                                     padding: 8,
-                                    fontSize: 12,
+                                    fontSize: 11,
                                     fontFamily:
                                       'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
                                     whiteSpace: 'pre-wrap',
@@ -211,40 +350,40 @@ function MessagePair({ user, assistant }: MessagePairProps) {
                                     margin: 0,
                                   }}
                                 >
-                                  {JSON.stringify(step.args, null, 2)}
+                                  {JSON.stringify(
+                                    assistant.toolSteps[runningToolIndex].args,
+                                    null,
+                                    2,
+                                  )}
                                 </Box>
                               </Box>
                             )}
-                            {step.result && (
-                              <Box mt={2}>
-                                <Text size="xs" c="dimmed" fw={500} mb={2}>
-                                  Result:
-                                </Text>
-                                <Box
-                                  component="pre"
-                                  style={{
-                                    background: 'rgba(0,0,0,0.03)',
-                                    borderRadius: 6,
-                                    padding: 8,
-                                    fontSize: 12,
-                                    fontFamily:
-                                      'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
-                                    whiteSpace: 'pre-wrap',
-                                    wordBreak: 'break-word',
-                                    margin: 0,
-                                    maxHeight: 200,
-                                    overflowY: 'auto',
-                                  }}
-                                >
-                                  {JSON.stringify(step.result, null, 2)}
-                                </Box>
-                              </Box>
-                            )}
-                          </Collapse>
-                        </Box>
-                      ))}
+                          </Box>
+                        )}
+                      {/* Show completed tools (if any) */}
+                      {assistant.toolSteps
+                        .map((step, idx) => ({ step, idx }))
+                        .filter(({ step }) => step.finished)
+                        .map(({ step, idx }) => (
+                          <Box
+                            key={idx}
+                            p={7}
+                            style={{
+                              backgroundColor: '#F5F8FE',
+                              borderRadius: 7,
+                              border: '1px solid #E3E7ED',
+                              opacity: 0.7,
+                            }}
+                          >
+                            <Group gap={7} align="center">
+                              <Text size="xs" fw={500} c="gray.6">
+                                ✓ {step.tool}
+                              </Text>
+                            </Group>
+                          </Box>
+                        ))}
                     </Stack>
-                  </Collapse>
+                  )}
                 </Box>
               )}
 
@@ -524,7 +663,9 @@ export function AgentEditor({
                   }
                   data={threads.map((thread) => ({
                     value: thread.agentThreadId,
-                    label: thread.title || 'Untitled conversation',
+                    label:
+                      thread.title?.slice(0, 20) + '...' ||
+                      'Untitled conversation',
                   }))}
                   value={selectedThreadId ?? null}
                   onChange={(value) => {

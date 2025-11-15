@@ -93,7 +93,8 @@ export default defineSchema({
         v.object({
           tool: v.string(),
           args: v.any(),
-          result: v.any(),
+          result: v.optional(v.any()),
+          finished: v.boolean(),
         }),
       ),
     ),

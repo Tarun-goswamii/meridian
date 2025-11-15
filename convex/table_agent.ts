@@ -516,34 +516,181 @@ Use the available tools to explore the database and provide a helpful answer.`
         prompt: contextualPrompt,
       })
 
-      for await (const st_part of stream.fullStream) {
-        console.log('STREAM PART:', st_part)
-      }
-      // STREAMING --------------------------------
+      // Create message record before streaming (like query mode)
+      const createdAt = Date.now()
+      const message_id = await ctx.runMutation(
+        agentUtilsApi.insertAgentMessageRecord,
+        {
+          threadId: threadDoc._id,
+          role: 'assistant',
+          agentName,
+          mode,
+          content: '',
+          description: '',
+          commands: [],
+          toolSteps: undefined,
+          createdAt: createdAt,
+        },
+      )
 
-      // const assistantText = res.text ?? ''
-      const assistantText = ''
-
-      // Extract tool steps from the CURRENT response only (not previous messages)
+      // Track state during streaming
+      let assistantText = ''
       const toolSteps: Array<{
         tool: string
         args: any
-        result: any
+        result?: any
+        finished: boolean
       }> = []
+      // Map toolCallId to index in toolSteps array for quick updates
+      const toolCallIdToIndex = new Map<string, number>()
 
+      // Helper function to update message with current tool steps
+      const updateMessageWithToolSteps = async () => {
+        await ctx.scheduler.runAfter(
+          0,
+          agentUtilsApi.updateAgentMessageRecord,
+          {
+            threadId: threadDoc._id,
+            messageId: message_id,
+            agentName,
+            mode,
+            content: assistantText,
+            description: summarizeText(assistantText),
+            toolSteps: toolSteps.length > 0 ? toolSteps : undefined,
+          },
+        )
+      }
+
+      // Process stream parts
+      for await (const st_part of stream.fullStream) {
+        // Handle tool-input-start - tool call is starting
+        // Note: tool-input-start uses 'id' field, while tool-call uses 'toolCallId'
+        // They should match, so we use the same value for tracking
+        if (st_part.type === 'tool-input-start') {
+          const toolStart = st_part as any
+          // Use 'id' from tool-input-start, which should match 'toolCallId' in tool-call
+          const toolCallId = toolStart.id || toolStart.toolCallId
+          if (toolCallId && toolStart.toolName) {
+            // Check if we already have this tool call (shouldn't happen, but be safe)
+            if (!toolCallIdToIndex.has(toolCallId)) {
+              // Add tool step with finished: false
+              const toolStepIndex = toolSteps.length
+              toolSteps.push({
+                tool: toolStart.toolName,
+                args: {}, // Args will be filled in when tool-call arrives
+                finished: false,
+              })
+              toolCallIdToIndex.set(toolCallId, toolStepIndex)
+
+              // Update message immediately to show tool call started
+              await updateMessageWithToolSteps()
+            }
+          }
+        }
+
+        // Handle tool-call - tool call details (name and args)
+        if (st_part.type === 'tool-call') {
+          const toolCall = st_part as any
+          // tool-call uses 'toolCallId', which should match 'id' from tool-input-start
+          const toolCallId = toolCall.toolCallId || toolCall.id
+          if (toolCallId && toolCall.toolName && toolCall.input) {
+            let toolStepIndex = toolCallIdToIndex.get(toolCallId)
+
+            // If tool step doesn't exist yet (tool-input-start might not have fired),
+            // create it now
+            if (toolStepIndex === undefined) {
+              toolStepIndex = toolSteps.length
+              toolSteps.push({
+                tool: toolCall.toolName,
+                args: toolCall.input,
+                finished: false,
+              })
+              toolCallIdToIndex.set(toolCallId, toolStepIndex)
+            } else {
+              // Update existing tool step with args
+              toolSteps[toolStepIndex] = {
+                ...toolSteps[toolStepIndex],
+                tool: toolCall.toolName,
+                args: toolCall.input,
+              }
+            }
+
+            // Update message to show tool call with args
+            await updateMessageWithToolSteps()
+          }
+        }
+
+        // Handle tool results - tool call completed
+        if (st_part.type === 'tool-result') {
+          const toolResult = st_part as any
+          // tool-result uses 'toolCallId', which should match 'id' from tool-input-start
+          const toolCallId = toolResult.toolCallId || toolResult.id
+          if (toolCallId && toolResult.toolName) {
+            const toolStepIndex = toolCallIdToIndex.get(toolCallId)
+
+            if (toolStepIndex !== undefined) {
+              // Update existing tool step with result and mark as finished
+              toolSteps[toolStepIndex] = {
+                ...toolSteps[toolStepIndex],
+                tool: toolResult.toolName,
+                args: toolResult.input || toolSteps[toolStepIndex].args,
+                result: toolResult.output,
+                finished: true,
+              }
+
+              // Update message to show tool call completed
+              await updateMessageWithToolSteps()
+            } else {
+              // Tool step doesn't exist, create it now (shouldn't happen, but be safe)
+              toolSteps.push({
+                tool: toolResult.toolName,
+                args: toolResult.input || {},
+                result: toolResult.output,
+                finished: true,
+              })
+              toolCallIdToIndex.set(toolCallId, toolSteps.length - 1)
+              await updateMessageWithToolSteps()
+            }
+          }
+        }
+
+        // Handle text deltas
+        if (st_part.type === 'text-delta') {
+          const textDelta = st_part as any
+          if (textDelta.text) {
+            assistantText += textDelta.text
+
+            // Update message with accumulated text
+            await ctx.scheduler.runAfter(
+              0,
+              agentUtilsApi.updateAgentMessageRecord,
+              {
+                threadId: threadDoc._id,
+                messageId: message_id,
+                agentName,
+                mode,
+                content: assistantText,
+                description: summarizeText(assistantText),
+                toolSteps: toolSteps.length > 0 ? toolSteps : undefined,
+              },
+            )
+          }
+        }
+      }
+      // STREAMING --------------------------------
+
+      // Final update with complete data
       const assistantCreatedAt = Date.now()
       const assistantSummary = summarizeText(assistantText)
 
-      await ctx.runMutation(agentUtilsApi.insertAgentMessageRecord, {
+      await ctx.runMutation(agentUtilsApi.updateAgentMessageRecord, {
         threadId: threadDoc._id,
-        role: 'assistant',
+        messageId: message_id,
         agentName,
         mode,
         content: assistantText,
         description: assistantSummary,
-        commands: [],
         toolSteps: toolSteps.length > 0 ? toolSteps : undefined,
-        createdAt: assistantCreatedAt,
       })
 
       await ctx.runMutation(agentUtilsApi.updateAgentThreadRecord, {
