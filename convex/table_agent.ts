@@ -2,12 +2,24 @@
 // Also, the tools are shown incrementally in the UI
 // Harr msg mei pervious tools hai
 import { api, components } from './_generated/api'
-import { Agent, createTool } from '@convex-dev/agent'
+import { Agent } from '@convex-dev/agent'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { action } from './_generated/server'
 import { v } from 'convex/values'
 import { checkAuth } from './authFns'
 import { z } from 'zod'
+import {
+  queryDuckDB,
+  getTableSchema,
+  getSampleRows,
+  createChart,
+  generateInsights,
+  webSearch,
+  scrapeWebPage,
+  analyzeDataQuality,
+  compareTables,
+  getTableList,
+} from './agent_tools'
 
 const google_gemini = createGoogleGenerativeAI({
   apiKey: process.env.GEMINI_API_KEY,
@@ -50,7 +62,7 @@ export const fetchDuckDBQuery = action({
   args: { query: v.string() },
   handler: async (_, { query }) => {
     const serverUrl =
-      process.env.DUCKDB_SERVER_URL || 'https://28ec673e8f8d.ngrok-free.app'
+      process.env.DUCKDB_SERVER_URL || 'https://7222d3476c71.ngrok-free.app'
 
     const response = await fetch(`${serverUrl}/api/duckdb/query`, {
       method: 'POST',
@@ -68,267 +80,332 @@ export const fetchDuckDBQuery = action({
   },
 })
 
-// Tool to query DuckDB
-const queryDuckDB: any = createTool({
-  description:
-    'Execute a SQL query on DuckDB and return the results. Use this to read data from tables, columns, or specific entries. Returns columns, rows, and metadata.',
-  args: z.object({
-    query: z
-      .string()
-      .describe(
-        'The SQL query to execute on DuckDB. Must be valid DuckDB SQL.',
-      ),
-  }),
-  handler: async (ctx, args) => {
-    try {
-      const result = await ctx.runAction(api.table_agent.fetchDuckDBQuery, {
-        query: args.query,
-      })
-      return {
-        success: true,
-        columns: result.columns || [],
-        rows: result.rows || [],
-        rowCount: result.rows?.length || 0,
-        columnCount: result.columns?.length || 0,
-      }
-    } catch (error) {
-      return {
-        success: false,
-        error:
-          error instanceof Error ? error.message : 'Unknown error occurred',
-      }
+// Action to perform web search
+export const performWebSearch = action({
+  args: { query: v.string(), maxResults: v.optional(v.number()) },
+  handler: async (_, { query, maxResults = 5 }) => {
+    const apiKey = process.env.TAVILY_API_KEY || process.env.SERPER_API_KEY
+    if (!apiKey) {
+      throw new Error(
+        'Web search API key not configured. Set TAVILY_API_KEY or SERPER_API_KEY environment variable.',
+      )
     }
-  },
-})
 
-// Tool to get table schema
-const getTableSchema: any = createTool({
-  description:
-    'Get the schema (column names and types) of a table. Use this to understand what columns are available in a table.',
-  args: z.object({
-    tableName: z.string().describe('The name of the table to get schema for'),
-  }),
-  handler: async (ctx, args) => {
-    try {
-      const query = `DESCRIBE ${args.tableName}`
-      const result = await ctx.runAction(api.table_agent.fetchDuckDBQuery, {
-        query,
-      })
-      return {
-        success: true,
-        tableName: args.tableName,
-        columns: result.columns || [],
-        rows: result.rows || [],
-      }
-    } catch (error) {
-      return {
-        success: false,
-        error:
-          error instanceof Error ? error.message : 'Unknown error occurred',
-      }
-    }
-  },
-})
-
-// Tool to get sample rows from a table
-const getSampleRows: any = createTool({
-  description:
-    'Get a sample of rows from a table. Use this to see example data and understand the structure of the table.',
-  args: z.object({
-    tableName: z.string().describe('The name of the table'),
-    limit: z
-      .number()
-      .optional()
-      .default(10)
-      .describe('Number of rows to return (default: 10, max: 100)'),
-  }),
-  handler: async (ctx, args) => {
-    try {
-      const limit = Math.min(Math.max(args.limit || 10, 1), 100)
-      const query = `SELECT * FROM ${args.tableName} LIMIT ${limit}`
-      const result = await ctx.runAction(api.table_agent.fetchDuckDBQuery, {
-        query,
-      })
-      return {
-        success: true,
-        tableName: args.tableName,
-        columns: result.columns || [],
-        rows: result.rows || [],
-        rowCount: result.rows?.length || 0,
-      }
-    } catch (error) {
-      return {
-        success: false,
-        error:
-          error instanceof Error ? error.message : 'Unknown error occurred',
-      }
-    }
-  },
-})
-
-// Tool to create a chart from data
-const createChart: any = createTool({
-  description:
-    'Create a chart visualization from query results. Use this when the user asks to visualize data, create a chart, or show data graphically. The tool will analyze the data structure and determine the best chart type.',
-  args: z.object({
-    query: z
-      .string()
-      .describe(
-        'The SQL query to execute to get data for the chart. Must be valid DuckDB SQL.',
-      ),
-    chartType: z
-      .enum(['bar', 'line', 'area', 'pie', 'scatter', 'donut'])
-      .optional()
-      .describe(
-        'The type of chart to create. If not specified, will be determined automatically based on data structure.',
-      ),
-    title: z.string().optional().describe('Title for the chart (optional)'),
-    xAxisKey: z
-      .string()
-      .optional()
-      .describe(
-        'Column name to use for X-axis. If not specified, will be determined automatically.',
-      ),
-    yAxisKey: z
-      .string()
-      .optional()
-      .describe(
-        'Column name to use for Y-axis. If not specified, will be determined automatically.',
-      ),
-  }),
-  handler: async (ctx, args) => {
-    try {
-      // Execute query to get data
-      const result = await ctx.runAction(api.table_agent.fetchDuckDBQuery, {
-        query: args.query,
-      })
-
-      if (!result || !result.rows || result.rows.length === 0) {
-        return {
-          success: false,
-          error: 'No data returned from query',
-        }
-      }
-
-      // Handle case where result might be an error
-      if (result.error) {
-        return {
-          success: false,
-          error: result.error,
-        }
-      }
-
-      const columns = result.columns || []
-      const rows = result.rows || []
-
-      // Analyze data structure to determine chart configuration
-      const numericColumns = columns.filter((col: any) => {
-        if (!col.type) return false
-        const type = col.type.toLowerCase()
-        return (
-          type.includes('int') ||
-          type.includes('float') ||
-          type.includes('double') ||
-          type.includes('decimal') ||
-          type.includes('numeric') ||
-          type.includes('real')
-        )
-      })
-
-      const stringColumns = columns.filter((col: any) => {
-        if (!col.type) return false
-        const type = col.type.toLowerCase()
-        return (
-          type.includes('varchar') ||
-          type.includes('text') ||
-          type.includes('string') ||
-          type.includes('char')
-        )
-      })
-
-      // Determine chart type if not specified
-      let chartType = args.chartType
-      if (!chartType) {
-        if (numericColumns.length === 0) {
-          return {
-            success: false,
-            error: 'No numeric columns found for charting',
-          }
-        } else if (numericColumns.length === 1 && stringColumns.length >= 1) {
-          chartType = 'bar'
-        } else if (numericColumns.length >= 2) {
-          chartType = 'line'
-        } else {
-          chartType = 'bar'
-        }
-      }
-
-      // Determine X and Y axis keys
-      let xAxisKey = args.xAxisKey
-      let yAxisKey = args.yAxisKey
-
-      if (!xAxisKey && stringColumns.length > 0) {
-        xAxisKey = stringColumns[0].name
-      } else if (!xAxisKey && numericColumns.length > 0) {
-        xAxisKey = numericColumns[0].name
-      }
-
-      if (!yAxisKey && numericColumns.length > 0) {
-        // Use first numeric column that's not the x-axis
-        const yCol =
-          numericColumns.find((col: any) => col.name !== xAxisKey) ||
-          numericColumns[0]
-        yAxisKey = yCol.name
-      }
-
-      // Prepare data for chart (ensure it's in the right format)
-      const chartData = rows.map((row: any) => {
-        const entry: any = {}
-        columns.forEach((col: any) => {
-          entry[col.name] = row[col.name]
-        })
-        return entry
-      })
-
-      // Determine series configuration for multi-series charts
-      const series: Array<{ name: string; color: string }> = []
-      if (chartType === 'line' || chartType === 'area' || chartType === 'bar') {
-        numericColumns.forEach((col: any, idx: number) => {
-          if (col.name !== xAxisKey) {
-            const colors = [
-              'blue',
-              'green',
-              'red',
-              'yellow',
-              'purple',
-              'orange',
-              'cyan',
-              'pink',
-            ]
-            series.push({
-              name: col.name,
-              color: colors[idx % colors.length],
-            })
-          }
-        })
-      }
-
-      return {
-        success: true,
-        chart: {
-          type: chartType,
-          title: args.title || `Chart: ${xAxisKey} vs ${yAxisKey}`,
-          data: chartData,
-          dataKey: xAxisKey,
-          xAxisKey: xAxisKey,
-          yAxisKey: yAxisKey,
-          series: series.length > 0 ? series : undefined,
-          columns: columns.map((col: any) => ({
-            name: col.name,
-            type: col.type,
-          })),
-          query: args.query, // Store the original query for re-execution
+    // Try Tavily first (better for AI agents), fallback to Serper
+    if (process.env.TAVILY_API_KEY) {
+      const response = await fetch('https://api.tavily.com/search', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
         },
+        body: JSON.stringify({
+          query,
+          max_results: Math.min(maxResults, 10),
+          include_answer: true,
+          include_raw_content: false,
+        }),
+      })
+
+      if (!response.ok) {
+        const text = await response.text().catch(() => '')
+        throw new Error(`Tavily API error: ${response.status} - ${text}`)
+      }
+
+      const result = await response.json()
+      return {
+        success: true,
+        query,
+        answer: result.answer,
+        results: result.results || [],
+        sources:
+          result.results?.map((r: any) => ({
+            title: r.title,
+            url: r.url,
+            content: r.content,
+          })) || [],
+      }
+    } else {
+      // Fallback to Serper API
+      const response = await fetch('https://google.serper.dev/search', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-KEY': apiKey,
+        },
+        body: JSON.stringify({
+          q: query,
+          num: Math.min(maxResults, 10),
+        }),
+      })
+
+      if (!response.ok) {
+        const text = await response.text().catch(() => '')
+        throw new Error(`Serper API error: ${response.status} - ${text}`)
+      }
+
+      const result = await response.json()
+      return {
+        success: true,
+        query,
+        answer: result.answerBox?.answer || result.answerBox?.snippet,
+        results: result.organic || [],
+        sources: (result.organic || []).map((r: any) => ({
+          title: r.title,
+          url: r.link,
+          content: r.snippet,
+        })),
+      }
+    }
+  },
+})
+
+// Action to scrape web page using Firecrawl
+export const scrapeWebPageAction = action({
+  args: { url: v.string(), includeMarkdown: v.optional(v.boolean()) },
+  handler: async (_, { url, includeMarkdown = true }) => {
+    const apiKey = process.env.FIRECRAWL_API_KEY
+    if (!apiKey) {
+      throw new Error(
+        'Firecrawl API key not configured. Set FIRECRAWL_API_KEY environment variable.',
+      )
+    }
+
+    try {
+      const response = await fetch('https://api.firecrawl.dev/v0/scrape', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          url,
+          formats: includeMarkdown ? ['markdown', 'html'] : ['html'],
+          onlyMainContent: true,
+        }),
+      })
+
+      if (!response.ok) {
+        const text = await response.text().catch(() => '')
+        throw new Error(`Firecrawl API error: ${response.status} - ${text}`)
+      }
+
+      const result = await response.json()
+      return {
+        success: true,
+        url,
+        title: result.data?.title || '',
+        markdown: result.data?.markdown || '',
+        html: result.data?.html || '',
+        content: result.data?.markdown || result.data?.html || '',
+        description: result.data?.description || '',
+        links: result.data?.links || [],
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : 'Unknown error occurred',
+      }
+    }
+  },
+})
+
+// Action to get list of all tables
+export const getTableListAction = action({
+  args: {},
+  handler: async (
+    ctx,
+  ): Promise<
+    | { success: true; tables: string[]; count: number }
+    | { success: false; error: string }
+  > => {
+    try {
+      const query =
+        "SELECT table_name FROM information_schema.tables WHERE table_schema = 'main' ORDER BY table_name"
+      const result: any = await ctx.runAction(
+        api.table_agent.fetchDuckDBQuery,
+        {
+          query,
+        },
+      )
+      return {
+        success: true,
+        tables: result.rows?.map((row: any) => row.table_name) || [],
+        count: result.rows?.length || 0,
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : 'Unknown error occurred',
+      }
+    }
+  },
+})
+
+// Action to analyze data quality
+export const analyzeDataQualityAction = action({
+  args: { tableName: v.string() },
+  handler: async (
+    ctx,
+    { tableName },
+  ): Promise<
+    | {
+        success: true
+        tableName: string
+        rowCount: number
+        columnCount: number
+        issues: Array<{
+          column: string
+          issue: string
+          severity: 'low' | 'medium' | 'high'
+          details: string
+        }>
+        issueCount: number
+        qualityScore: number
+      }
+    | { success: false; error: string }
+  > => {
+    try {
+      // Get table schema
+      const schemaQuery = `DESCRIBE ${tableName}`
+      const schemaResult: any = await ctx.runAction(
+        api.table_agent.fetchDuckDBQuery,
+        { query: schemaQuery },
+      )
+
+      if (!schemaResult.rows || schemaResult.rows.length === 0) {
+        return {
+          success: false,
+          error: 'Table not found or has no columns',
+        }
+      }
+
+      const columns: any[] = schemaResult.rows
+      const issues: Array<{
+        column: string
+        issue: string
+        severity: 'low' | 'medium' | 'high'
+        details: string
+      }> = []
+
+      // Analyze each column
+      for (const col of columns) {
+        const colName = col.column_name || col.name
+        const colType = col.column_type || col.type
+
+        // Check for nulls
+        const nullCheckQuery = `SELECT COUNT(*) as total, COUNT(${colName}) as non_null FROM ${tableName}`
+        try {
+          const nullResult = await ctx.runAction(
+            api.table_agent.fetchDuckDBQuery,
+            { query: nullCheckQuery },
+          )
+          if (nullResult.rows && nullResult.rows.length > 0) {
+            const total = nullResult.rows[0].total || 0
+            const nonNull = nullResult.rows[0].non_null || 0
+            const nullPercent =
+              total > 0 ? ((total - nonNull) / total) * 100 : 0
+
+            if (nullPercent > 50) {
+              issues.push({
+                column: colName,
+                issue: 'High null percentage',
+                severity: 'high',
+                details: `${nullPercent.toFixed(1)}% of values are null`,
+              })
+            } else if (nullPercent > 20) {
+              issues.push({
+                column: colName,
+                issue: 'Moderate null percentage',
+                severity: 'medium',
+                details: `${nullPercent.toFixed(1)}% of values are null`,
+              })
+            }
+          }
+        } catch (err) {
+          // Skip if query fails
+        }
+
+        // Check for duplicates (if column seems like an ID)
+        if (
+          colName.toLowerCase().includes('id') ||
+          colName.toLowerCase().includes('key')
+        ) {
+          const duplicateQuery = `SELECT ${colName}, COUNT(*) as cnt FROM ${tableName} GROUP BY ${colName} HAVING COUNT(*) > 1 LIMIT 10`
+          try {
+            const dupResult = await ctx.runAction(
+              api.table_agent.fetchDuckDBQuery,
+              { query: duplicateQuery },
+            )
+            if (dupResult.rows && dupResult.rows.length > 0) {
+              issues.push({
+                column: colName,
+                issue: 'Duplicate values found',
+                severity: 'high',
+                details: `Found ${dupResult.rows.length} duplicate values (may indicate data quality issue)`,
+              })
+            }
+          } catch (err) {
+            // Skip if query fails
+          }
+        }
+
+        // Check for empty strings in text columns
+        if (
+          colType &&
+          (colType.toLowerCase().includes('varchar') ||
+            colType.toLowerCase().includes('text') ||
+            colType.toLowerCase().includes('string'))
+        ) {
+          const emptyQuery = `SELECT COUNT(*) as empty_count FROM ${tableName} WHERE ${colName} = '' OR ${colName} IS NULL`
+          try {
+            const emptyResult = await ctx.runAction(
+              api.table_agent.fetchDuckDBQuery,
+              { query: emptyQuery },
+            )
+            if (emptyResult.rows && emptyResult.rows.length > 0) {
+              const emptyCount = emptyResult.rows[0].empty_count || 0
+              if (emptyCount > 0) {
+                issues.push({
+                  column: colName,
+                  issue: 'Empty string values',
+                  severity: 'low',
+                  details: `Found ${emptyCount} empty or null string values`,
+                })
+              }
+            }
+          } catch (err) {
+            // Skip if query fails
+          }
+        }
+      }
+
+      // Get row count
+      const countQuery = `SELECT COUNT(*) as row_count FROM ${tableName}`
+      const countResult: any = await ctx.runAction(
+        api.table_agent.fetchDuckDBQuery,
+        { query: countQuery },
+      )
+      const rowCount: number = countResult.rows?.[0]?.row_count || 0
+
+      return {
+        success: true,
+        tableName,
+        rowCount,
+        columnCount: columns.length,
+        issues,
+        issueCount: issues.length,
+        qualityScore:
+          issues.length === 0
+            ? 100
+            : Math.max(
+                0,
+                100 -
+                  issues.length * 10 -
+                  issues.filter((i) => i.severity === 'high').length * 20,
+              ),
       }
     } catch (error) {
       return {
@@ -361,29 +438,45 @@ const analysis_agent = new Agent(components.agent, {
   name: 'analysis_agent',
   languageModel: model,
   instructions: `
-You are an intelligent assistant that helps users understand and analyze their database.
+You are an intelligent assistant that helps users understand and analyze their database, and can also search the web and gather external information.
 
-You have access to tools that let you:
+You have access to powerful tools that let you:
 - Query DuckDB to read data from tables
 - Get table schemas to understand structure
 - Get sample rows to see example data
 - Create charts to visualize data
+- Generate AI-powered insights from data analysis
+- Search the web for current information, facts, definitions, or external context
+- Scrape web pages to extract content from URLs
+- Analyze data quality (check for nulls, duplicates, etc.)
+- Compare two tables to find differences
+- List all available tables in the database
 
 When a user asks a question:
-1. Use the available tools to explore the database and gather information
-2. Analyze the data you retrieve
-3. If the user asks to visualize data, create a chart, or show data graphically, use the createChart tool
-4. Provide a clear, helpful answer based on your findings
+1. If the question requires external information, current events, definitions, or context not in the database, use the webSearch tool to find relevant information
+2. If the user provides a URL or asks to read a web page, use the scrapeWebPage tool
+3. Use database tools to explore the database and gather information
+4. Analyze the data you retrieve
+5. If the user asks to visualize data, create a chart, or show data graphically, use the createChart tool
+6. If the user asks for insights, patterns, or anomalies, use the generateInsights tool
+7. If the user asks about data quality, use the analyzeDataQuality tool
+8. If the user wants to compare tables, use the compareTables tool
+9. Provide a clear, helpful answer based on your findings
 
 Be thorough but efficient. Use tools strategically to gather the information needed to answer the user's question.
 `,
-  // 4. Explain what data you looked at to arrive at your answer
-  maxSteps: 10,
+  maxSteps: 20,
   tools: {
     queryDuckDB,
     getTableSchema,
     getSampleRows,
     createChart,
+    generateInsights,
+    webSearch,
+    scrapeWebPage,
+    analyzeDataQuality,
+    compareTables,
+    getTableList,
   },
 })
 
