@@ -100,4 +100,22 @@ export default defineSchema({
     ),
     createdAt: v.number(),
   }).index('by_thread', ['threadId']),
+  notifications: defineTable({
+    tableName: v.string(),
+    userId: v.string(),
+    userName: v.optional(v.string()),
+    userImage: v.optional(v.string()),
+    type: v.union(
+      v.literal('query'),
+      v.literal('agent_query'),
+      v.literal('agent_analysis'),
+      v.literal('insights_generated'),
+      v.literal('chart_created'),
+    ),
+    message: v.string(),
+    metadata: v.optional(v.any()),
+    createdAt: v.number(),
+  })
+    .index('by_tableName', ['tableName'])
+    .index('by_tableName_createdAt', ['tableName', 'createdAt']),
 })

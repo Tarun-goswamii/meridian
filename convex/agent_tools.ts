@@ -2,6 +2,132 @@ import { createTool } from '@convex-dev/agent'
 import { api } from './_generated/api'
 import { z } from 'zod'
 
+// Token limit utilities - keep tool responses small to reduce input tokens
+// ~1 char ≈ 0.25 tokens, so 2000 chars ≈ 500 tokens
+const MAX_STRING_LENGTH = 2000 // Max characters for string fields
+const MAX_ARRAY_ITEMS = 10 // Max items in arrays
+const MAX_CONTENT_LENGTH = 5000 // Max characters for large content fields (markdown/html)
+
+function truncateString(str: string, maxLength: number): string {
+  if (!str || str.length <= maxLength) return str
+  return str.slice(0, maxLength) + '... [TRUNCATED]'
+}
+
+function truncateArray<T>(arr: T[], maxItems: number): T[] {
+  if (!arr || arr.length <= maxItems) return arr
+  return arr.slice(0, maxItems)
+}
+
+function truncateToolResponse(response: any): any {
+  if (!response || typeof response !== 'object') return response
+
+  const truncated = { ...response }
+
+  // Truncate large string fields
+  if (typeof truncated.content === 'string') {
+    truncated.content = truncateString(truncated.content, MAX_CONTENT_LENGTH)
+  }
+  if (typeof truncated.markdown === 'string') {
+    truncated.markdown = truncateString(truncated.markdown, MAX_CONTENT_LENGTH)
+  }
+  if (typeof truncated.html === 'string') {
+    truncated.html = truncateString(truncated.html, MAX_CONTENT_LENGTH)
+  }
+  if (typeof truncated.description === 'string') {
+    truncated.description = truncateString(truncated.description, MAX_STRING_LENGTH)
+  }
+  if (typeof truncated.error === 'string') {
+    truncated.error = truncateString(truncated.error, MAX_STRING_LENGTH)
+  }
+  if (typeof truncated.message === 'string') {
+    truncated.message = truncateString(truncated.message, MAX_STRING_LENGTH)
+  }
+  if (typeof truncated.summary === 'string') {
+    truncated.summary = truncateString(truncated.summary, MAX_STRING_LENGTH)
+  }
+
+  // Truncate arrays
+  if (Array.isArray(truncated.rows)) {
+    truncated.rows = truncateArray(truncated.rows, MAX_ARRAY_ITEMS)
+    if (truncated.rows.length < (response.rows?.length || 0)) {
+      truncated.rowCount = response.rows?.length || 0
+      truncated._truncatedRows = true
+    }
+  }
+  if (Array.isArray(truncated.sources)) {
+    truncated.sources = truncateArray(truncated.sources, MAX_ARRAY_ITEMS)
+    if (truncated.sources.length < (response.sources?.length || 0)) {
+      truncated._truncatedSources = true
+    }
+  }
+  if (Array.isArray(truncated.results)) {
+    truncated.results = truncateArray(truncated.results, MAX_ARRAY_ITEMS)
+    if (truncated.results.length < (response.results?.length || 0)) {
+      truncated._truncatedResults = true
+    }
+  }
+  if (Array.isArray(truncated.data)) {
+    truncated.data = truncateArray(truncated.data, MAX_ARRAY_ITEMS)
+    if (truncated.data.length < (response.data?.length || 0)) {
+      truncated._truncatedData = true
+    }
+  }
+  if (Array.isArray(truncated.links)) {
+    truncated.links = truncateArray(truncated.links, MAX_ARRAY_ITEMS)
+  }
+  if (Array.isArray(truncated.issues)) {
+    truncated.issues = truncateArray(truncated.issues, MAX_ARRAY_ITEMS)
+    if (truncated.issues.length < (response.issues?.length || 0)) {
+      truncated._truncatedIssues = true
+    }
+  }
+
+  // Truncate nested content in sources/results
+  if (Array.isArray(truncated.sources)) {
+    truncated.sources = truncated.sources.map((source: any) => {
+      if (typeof source === 'object' && source !== null) {
+        const truncatedSource = { ...source }
+        if (typeof truncatedSource.content === 'string') {
+          truncatedSource.content = truncateString(truncatedSource.content, MAX_STRING_LENGTH)
+        }
+        if (typeof truncatedSource.description === 'string') {
+          truncatedSource.description = truncateString(truncatedSource.description, MAX_STRING_LENGTH)
+        }
+        return truncatedSource
+      }
+      return source
+    })
+  }
+
+  if (Array.isArray(truncated.results)) {
+    truncated.results = truncated.results.map((result: any) => {
+      if (typeof result === 'object' && result !== null) {
+        const truncatedResult = { ...result }
+        if (typeof truncatedResult.description === 'string') {
+          truncatedResult.description = truncateString(truncatedResult.description, MAX_STRING_LENGTH)
+        }
+        if (typeof truncatedResult.snippet === 'string') {
+          truncatedResult.snippet = truncateString(truncatedResult.snippet, MAX_STRING_LENGTH)
+        }
+        return truncatedResult
+      }
+      return result
+    })
+  }
+
+  // Truncate chart data if present
+  if (truncated.chart && typeof truncated.chart === 'object') {
+    if (Array.isArray(truncated.chart.data)) {
+      truncated.chart.data = truncateArray(truncated.chart.data, MAX_ARRAY_ITEMS)
+      if (truncated.chart.data.length < (response.chart?.data?.length || 0)) {
+        truncated.chart._truncatedData = true
+      }
+    }
+  }
+
+  return truncated
+}
+
 // Tool to query DuckDB
 export const queryDuckDB: any = createTool({
   description:
@@ -18,13 +144,13 @@ export const queryDuckDB: any = createTool({
       const result = await ctx.runAction(api.table_agent.fetchDuckDBQuery, {
         query: args.query,
       })
-      return {
+      return truncateToolResponse({
         success: true,
         columns: result.columns || [],
         rows: result.rows || [],
         rowCount: result.rows?.length || 0,
         columnCount: result.columns?.length || 0,
-      }
+      })
     } catch (error) {
       return {
         success: false,
@@ -48,12 +174,12 @@ export const getTableSchema: any = createTool({
       const result = await ctx.runAction(api.table_agent.fetchDuckDBQuery, {
         query,
       })
-      return {
+      return truncateToolResponse({
         success: true,
         tableName: args.tableName,
         columns: result.columns || [],
         rows: result.rows || [],
-      }
+      })
     } catch (error) {
       return {
         success: false,
@@ -83,13 +209,13 @@ export const getSampleRows: any = createTool({
       const result = await ctx.runAction(api.table_agent.fetchDuckDBQuery, {
         query,
       })
-      return {
+      return truncateToolResponse({
         success: true,
         tableName: args.tableName,
         columns: result.columns || [],
         rows: result.rows || [],
         rowCount: result.rows?.length || 0,
-      }
+      })
     } catch (error) {
       return {
         success: false,
@@ -247,7 +373,7 @@ export const createChart: any = createTool({
         })
       }
 
-      return {
+      return truncateToolResponse({
         success: true,
         chart: {
           type: chartType,
@@ -263,7 +389,7 @@ export const createChart: any = createTool({
           })),
           query: args.query, // Store the original query for re-execution
         },
-      }
+      })
     } catch (error) {
       return {
         success: false,
@@ -315,7 +441,7 @@ export const generateInsights: any = createTool({
       // For now, we'll return a message that insights generation requires statistical analysis
       // which should be done on the frontend or via a more complex flow
 
-      return {
+      return truncateToolResponse({
         success: true,
         message:
           'Insights generation requires statistical analysis. Use analyzeDataQuality or queryDuckDB to gather data first, then insights can be generated.',
@@ -323,7 +449,7 @@ export const generateInsights: any = createTool({
         rowCount: rows.length,
         columnCount: columns.length,
         note: 'For full insights generation, use the insights API with statistical analyses.',
-      }
+      })
     } catch (error) {
       return {
         success: false,
@@ -364,13 +490,13 @@ export const firecrawlSearch: any = createTool({
         }
       }
 
-      return {
+      return truncateToolResponse({
         success: true,
         query: args.query,
         sources: result.sources || [],
         sourceCount: result.sources?.length || 0,
         results: result.results || [],
-      }
+      })
     } catch (error) {
       return {
         success: false,
@@ -385,8 +511,10 @@ export const firecrawlSearch: any = createTool({
 
 // Tool to scrape web pages using Firecrawl
 export const scrapeWebPage: any = createTool({
-  description:
-    'Scrape and extract content from a web page using Firecrawl. Use this when you need to get information from a specific URL, read article content, or extract data from websites. Returns clean markdown content.',
+  description: `Scrape and extract content from a web page using Firecrawl.
+    Use this when you need to get information from a specific URL, read article content, or extract data from websites.
+    Returns clean markdown content. You are supposed to get insights from that markdown content and tell the user concisely.
+    Do not just give the user the direct markdown that you get.`,
   args: z.object({
     url: z.string().describe('The URL of the web page to scrape'),
     includeMarkdown: z
@@ -409,7 +537,7 @@ export const scrapeWebPage: any = createTool({
         }
       }
 
-      return {
+      return truncateToolResponse({
         success: true,
         url: result.url,
         title: result.title,
@@ -418,7 +546,7 @@ export const scrapeWebPage: any = createTool({
         description: result.description,
         links: result.links || [],
         contentLength: result.content?.length || 0,
-      }
+      })
     } catch (error) {
       return {
         success: false,
@@ -462,7 +590,7 @@ export const extractWebPage: any = createTool({
         }
       }
 
-      return {
+      return truncateToolResponse({
         success: true,
         urls: result.urls,
         data: result.data || [],
@@ -471,7 +599,7 @@ export const extractWebPage: any = createTool({
           : result.data
             ? 1
             : 0,
-      }
+      })
     } catch (error) {
       return {
         success: false,
@@ -507,7 +635,7 @@ export const analyzeDataQuality: any = createTool({
         }
       }
 
-      return {
+      return truncateToolResponse({
         success: true,
         tableName: result.tableName,
         rowCount: result.rowCount,
@@ -516,7 +644,7 @@ export const analyzeDataQuality: any = createTool({
         issueCount: result.issueCount,
         issues: result.issues || [],
         summary: `Found ${result.issueCount} data quality issues. Quality score: ${result.qualityScore}/100`,
-      }
+      })
     } catch (error) {
       return {
         success: false,
@@ -601,7 +729,7 @@ export const compareTables: any = createTool({
         (col2: any) => !columns1.some((col1: any) => col1.name === col2.name),
       )
 
-      return {
+      return truncateToolResponse({
         success: true,
         table1: {
           name: args.table1,
@@ -625,7 +753,7 @@ export const compareTables: any = createTool({
           onlyInTable2: onlyInTable2,
         },
         summary: `Table 1 has ${count1} rows and ${columns1.length} columns. Table 2 has ${count2} rows and ${columns2.length} columns. ${commonColumns.length} common columns found.`,
-      }
+      })
     } catch (error) {
       return {
         success: false,
@@ -652,12 +780,12 @@ export const getTableList: any = createTool({
         }
       }
 
-      return {
+      return truncateToolResponse({
         success: true,
         tables: result.tables || [],
         count: result.count || 0,
         message: `Found ${result.count || 0} table(s) in the database`,
-      }
+      })
     } catch (error) {
       return {
         success: false,

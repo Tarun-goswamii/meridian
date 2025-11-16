@@ -297,6 +297,8 @@ Please analyze this dataset and provide 3-5 key insights in plain language. Focu
 Keep insights concise (1-2 sentences each) and actionable.
 `
 
+      console.log('INSIGHTS Context', context)
+
       const result = await generateObject({
         model,
         schema: z.object({

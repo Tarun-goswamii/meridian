@@ -6,7 +6,7 @@
 3. Sentry setup ✅
 4. Charts -- Live updating too ✅
 5. Autumn pricing ✅
-6. Deploy + Netlify
+6. Deploy + Netlify ✅
    
 7. UI + Landing
 8. Perhaps try to make it git-like?

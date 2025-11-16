@@ -2,6 +2,7 @@ import { mutation, query } from './_generated/server'
 import { components } from './_generated/api'
 import { v } from 'convex/values'
 import { Presence } from '@convex-dev/presence'
+import { type Id } from './_generated/dataModel'
 
 export const presence = new Presence(components.presence)
 
@@ -21,8 +22,33 @@ export const heartbeat = mutation({
 export const list = query({
   args: { roomToken: v.string() },
   handler: async (ctx, { roomToken }) => {
-    // Avoid adding per-user reads so all subscriptions can share same cache.
-    return await presence.list(ctx, roomToken)
+    // Optionally check auth here if needed using authFns
+    // await authFns.checkAuth(ctx);
+
+    // Join presence state with user info.
+    const presenceList = await presence.list(ctx, roomToken)
+
+    const listWithUserInfo = await Promise.all(
+      presenceList.map(async (entry) => {
+        try {
+          const user = await ctx.db.get(entry.userId as Id<'users'>)
+          if (!user) {
+            // If user not found (possibly invalid userId), leave it as is
+            return entry
+          }
+          return {
+            ...entry,
+            name: user.name,
+            image: user.image,
+          }
+        } catch (e) {
+          // If there's an error (e.g., bad userId), just return the entry as is
+          return entry
+        }
+      }),
+    )
+
+    return listWithUserInfo
   },
 })
 

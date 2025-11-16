@@ -17,7 +17,9 @@ export const currentUser = query({
     return {
       isAuthenticated: true,
       userId,
-      name: user?.name ?? 'User',
+      name: user?.name,
+      email: user?.email,
+      image: user?.image,
     }
   },
 })

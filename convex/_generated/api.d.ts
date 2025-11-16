@@ -15,6 +15,7 @@ import type * as authFns from "../authFns.js";
 import type * as csv from "../csv.js";
 import type * as http from "../http.js";
 import type * as insights from "../insights.js";
+import type * as notifications from "../notifications.js";
 import type * as presence from "../presence.js";
 import type * as queryLog from "../queryLog.js";
 import type * as table_agent from "../table_agent.js";
@@ -41,6 +42,7 @@ declare const fullApi: ApiFromModules<{
   csv: typeof csv;
   http: typeof http;
   insights: typeof insights;
+  notifications: typeof notifications;
   presence: typeof presence;
   queryLog: typeof queryLog;
   table_agent: typeof table_agent;

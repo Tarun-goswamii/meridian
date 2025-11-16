@@ -27,6 +27,8 @@ import {
   type ChartItem,
   type ChartConfig,
 } from '~/components/ChartCanvas'
+import { convexQuery } from '@convex-dev/react-query'
+import { TableNotifications } from '~/components/TableNotifications'
 
 type TableData = {
   columns: { name: string; type: string }[]
@@ -101,13 +103,22 @@ function RouteComponent() {
   const [activeTab, setActiveTab] = useState<'table' | 'statistics' | 'charts'>(
     'table',
   )
+  const user = useSuspenseQuery(convexQuery(api.authFns.currentUser, {}))
 
-  const [name] = useState(() => 'User ' + Math.floor(Math.random() * 10000))
-  const presenceState = usePresence(api.presence, 'my-chat-room', name)
+  // Use table-specific room ID for presence
+  const roomId = `table:${table}`
+  const presenceState = usePresence(
+    api.presence,
+    roomId,
+    user?.data?.userId ?? 'User ' + Math.floor(Math.random() * 10000),
+  )
 
   const askGemini = useAction(api.table_agent.askGemini)
   const generateInsights = useAction(api.insights.generateInsights)
   const logQuery = useMutation(api.queryLog.logQuery)
+  const broadcastNotification = useMutation(
+    api.notifications.broadcastNotification,
+  )
   const threads = useQuery(api.agent_utils.listAgentThreads, {
     tableName: table,
   })
@@ -240,6 +251,13 @@ function RouteComponent() {
 
     // Only update if the chart IDs have actually changed
     if (previousChartIdsRef.current !== newChartIds) {
+      const previousIds = previousChartIdsRef.current.split(',').filter(Boolean)
+
+      // Detect newly created charts
+      const newCharts = extractedCharts.filter(
+        (chart) => !previousIds.includes(chart.id),
+      )
+
       previousChartIdsRef.current = newChartIds
 
       // Preserve positions of existing charts
@@ -252,8 +270,20 @@ function RouteComponent() {
         chartsRef.current = updatedCharts
         return updatedCharts
       })
+
+      // Broadcast notification for new charts
+      if (newCharts.length > 0) {
+        broadcastNotification({
+          tableName: table,
+          type: 'chart_created',
+          message: `created ${newCharts.length} chart${newCharts.length > 1 ? 's' : ''}`,
+          metadata: { chartCount: newCharts.length },
+        }).catch((err) => {
+          console.error('Failed to broadcast notification:', err)
+        })
+      }
     }
-  }, [extractedCharts])
+  }, [extractedCharts, table, broadcastNotification])
 
   // Re-execute chart queries when table data changes
   useEffect(() => {
@@ -459,6 +489,21 @@ function RouteComponent() {
         resultMetadata,
       })
 
+      // Broadcast notification about query execution
+      try {
+        const queryPreview =
+          query.length > 50 ? query.substring(0, 50) + '...' : query
+        await broadcastNotification({
+          tableName: table,
+          type: 'query',
+          message: `executed a query: ${queryPreview}`,
+          metadata: { query, resultMetadata },
+        })
+      } catch (err) {
+        // Don't fail if notification fails
+        console.error('Failed to broadcast notification:', err)
+      }
+
       await queryClient.invalidateQueries({ queryKey: ['tables', table] })
       setPageIndex(0) // Reset page on query change
 
@@ -555,6 +600,19 @@ function RouteComponent() {
       } else {
         setInsights(result.insights || [])
         setStatisticalFindings(result.statisticalFindings || [])
+
+        // Broadcast notification about insights generation
+        try {
+          await broadcastNotification({
+            tableName: table,
+            type: 'insights_generated',
+            message: `generated ${result.insights?.length || 0} insights`,
+            metadata: { insightCount: result.insights?.length || 0 },
+          })
+        } catch (err) {
+          // Don't fail if notification fails
+          console.error('Failed to broadcast notification:', err)
+        }
       }
     } catch (err) {
       setInsightsError(
@@ -656,6 +714,26 @@ function RouteComponent() {
       )
       setSelectedThreadId(response.threadId)
 
+      // Broadcast notification about agent action
+      try {
+        const inputPreview =
+          agentInput.length > 50
+            ? agentInput.substring(0, 50) + '...'
+            : agentInput
+        await broadcastNotification({
+          tableName: table,
+          type: response.mode === 'query' ? 'agent_query' : 'agent_analysis',
+          message:
+            response.mode === 'query'
+              ? `asked the AI to generate a query: "${inputPreview}"`
+              : `asked the AI for analysis: "${inputPreview}"`,
+          metadata: { prompt: agentInput, mode: response.mode },
+        })
+      } catch (err) {
+        // Don't fail if notification fails
+        console.error('Failed to broadcast notification:', err)
+      }
+
       setAgentInput('')
     } catch (err) {
       setAgentError(
@@ -744,6 +822,10 @@ function RouteComponent() {
 
   return (
     <>
+      <TableNotifications
+        tableName={table}
+        currentUserId={user?.data?.userId ?? null}
+      />
       <Box
         style={{
           position: 'relative',
