@@ -9,6 +9,7 @@ import type { QueryClient } from '@tanstack/react-query'
 import { MantineProvider } from '@mantine/core'
 import { Notifications } from '@mantine/notifications'
 import { AutumnProvider } from 'autumn-js/react'
+import PRESENCE_CSS from '@convex-dev/presence/dist/style.css?url'
 import '@mantine/core/styles.css'
 import '@mantine/notifications/styles.css'
 import '@mantine/dropzone/styles.css'
@@ -50,6 +51,7 @@ export const Route = createRootRouteWithContext<{
       { rel: 'manifest', href: '/site.webmanifest', color: '#fffff' },
       { rel: 'icon', href: '/favicon.ico' },
     ],
+    styles: [{ children: PRESENCE_CSS }],
   }),
   notFoundComponent: () => <div>Route not found</div>,
   component: RootComponent,
