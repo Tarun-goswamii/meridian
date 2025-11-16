@@ -24,4 +24,7 @@ export default defineConfig({
   optimizeDeps: {
     exclude: ['@duckdb/node-bindings'],
   },
+  ssr: {
+    noExternal: ['@convex-dev/presence'], // Force external resolution
+  },
 })

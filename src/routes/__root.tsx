@@ -31,6 +31,7 @@ export const Route = createRootRouteWithContext<{
       },
     ],
     links: [
+      { rel: 'stylesheet', href: PRESENCE_CSS },
       {
         rel: 'apple-touch-icon',
         sizes: '180x180',
@@ -50,8 +51,8 @@ export const Route = createRootRouteWithContext<{
       },
       { rel: 'manifest', href: '/site.webmanifest', color: '#fffff' },
       { rel: 'icon', href: '/favicon.ico' },
-      { rel: 'stylesheet', href: PRESENCE_CSS },
     ],
+    styles: [{ children: PRESENCE_CSS }],
   }),
   notFoundComponent: () => <div>Route not found</div>,
   component: RootComponent,
