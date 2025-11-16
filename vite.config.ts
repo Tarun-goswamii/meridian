@@ -18,7 +18,7 @@ export default defineConfig({
       projects: ['./tsconfig.json'],
     }),
     tanstackStart(),
-    ...(Array.isArray(netlify) ? netlify : [netlify]),
+    netlify(),
     viteReact(),
   ],
   optimizeDeps: {
