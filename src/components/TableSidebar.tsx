@@ -94,12 +94,11 @@ export function TableSidebar({
         bottom: 0,
         width: 400,
         zIndex: 200,
-        padding: '16px',
         backgroundColor: 'transparent',
         display: 'flex',
         flexDirection: 'column',
         height: '100vh',
-        gap: '12px',
+        borderLeft: '2px solid rgba(0, 0, 0, 0.1)',
       }}
     >
       {/* Toggle Header */}
@@ -109,9 +108,9 @@ export function TableSidebar({
           backgroundColor: 'rgba(255, 255, 255, 0.9)',
           backdropFilter: 'blur(10px)',
           WebkitBackdropFilter: 'blur(10px)',
-          borderRadius: 'var(--mantine-radius-md)',
-          border: '1px solid rgba(0, 0, 0, 0.1)',
-          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
+          // borderRadius: 'var(--mantine-radius-md)',
+          // border: '1px solid rgba(0, 0, 0, 0.1)',
+          // boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
         }}
       >
         <SegmentedControl
@@ -210,12 +209,12 @@ export function TableSidebar({
         ) : (
           <Box
             style={{
-              backgroundColor: 'rgba(255, 255, 255, 0.9)',
-              backdropFilter: 'blur(10px)',
-              WebkitBackdropFilter: 'blur(10px)',
-              borderRadius: 'var(--mantine-radius-md)',
-              border: '1px solid rgba(0, 0, 0, 0.1)',
-              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
+              // backgroundColor: 'rgba(255, 255, 255, 0.9)',
+              // backdropFilter: 'blur(10px)',
+              // WebkitBackdropFilter: 'blur(10px)',
+              // borderRadius: 'var(--mantine-radius-md)',
+              // border: '1px solid rgba(0, 0, 0, 0.1)',
+              // boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
               height: '100%',
               overflow: 'hidden',
               display: 'flex',

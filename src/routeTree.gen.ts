@@ -12,7 +12,9 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthedRouteRouteImport } from './routes/_authed/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthedDashboardRouteImport } from './routes/_authed/dashboard'
+import { Route as ApiAutumnRouteRouteImport } from './routes/api/autumn/route'
 import { Route as ApiDuckdbQueryRouteImport } from './routes/api/duckdb/query'
+import { Route as ApiAutumnSplatRouteImport } from './routes/api/autumn/$'
 import { Route as AuthedTableTableRouteImport } from './routes/_authed/table.$table'
 
 const AuthedRouteRoute = AuthedRouteRouteImport.update({
@@ -29,10 +31,20 @@ const AuthedDashboardRoute = AuthedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthedRouteRoute,
 } as any)
+const ApiAutumnRouteRoute = ApiAutumnRouteRouteImport.update({
+  id: '/api/autumn',
+  path: '/api/autumn',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiDuckdbQueryRoute = ApiDuckdbQueryRouteImport.update({
   id: '/api/duckdb/query',
   path: '/api/duckdb/query',
   getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAutumnSplatRoute = ApiAutumnSplatRouteImport.update({
+  id: '/$',
+  path: '/$',
+  getParentRoute: () => ApiAutumnRouteRoute,
 } as any)
 const AuthedTableTableRoute = AuthedTableTableRouteImport.update({
   id: '/table/$table',
@@ -42,41 +54,62 @@ const AuthedTableTableRoute = AuthedTableTableRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/api/autumn': typeof ApiAutumnRouteRouteWithChildren
   '/dashboard': typeof AuthedDashboardRoute
   '/table/$table': typeof AuthedTableTableRoute
+  '/api/autumn/$': typeof ApiAutumnSplatRoute
   '/api/duckdb/query': typeof ApiDuckdbQueryRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api/autumn': typeof ApiAutumnRouteRouteWithChildren
   '/dashboard': typeof AuthedDashboardRoute
   '/table/$table': typeof AuthedTableTableRoute
+  '/api/autumn/$': typeof ApiAutumnSplatRoute
   '/api/duckdb/query': typeof ApiDuckdbQueryRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authed': typeof AuthedRouteRouteWithChildren
+  '/api/autumn': typeof ApiAutumnRouteRouteWithChildren
   '/_authed/dashboard': typeof AuthedDashboardRoute
   '/_authed/table/$table': typeof AuthedTableTableRoute
+  '/api/autumn/$': typeof ApiAutumnSplatRoute
   '/api/duckdb/query': typeof ApiDuckdbQueryRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/dashboard' | '/table/$table' | '/api/duckdb/query'
+  fullPaths:
+    | '/'
+    | '/api/autumn'
+    | '/dashboard'
+    | '/table/$table'
+    | '/api/autumn/$'
+    | '/api/duckdb/query'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/dashboard' | '/table/$table' | '/api/duckdb/query'
+  to:
+    | '/'
+    | '/api/autumn'
+    | '/dashboard'
+    | '/table/$table'
+    | '/api/autumn/$'
+    | '/api/duckdb/query'
   id:
     | '__root__'
     | '/'
     | '/_authed'
+    | '/api/autumn'
     | '/_authed/dashboard'
     | '/_authed/table/$table'
+    | '/api/autumn/$'
     | '/api/duckdb/query'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthedRouteRoute: typeof AuthedRouteRouteWithChildren
+  ApiAutumnRouteRoute: typeof ApiAutumnRouteRouteWithChildren
   ApiDuckdbQueryRoute: typeof ApiDuckdbQueryRoute
 }
 
@@ -103,12 +136,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedDashboardRouteImport
       parentRoute: typeof AuthedRouteRoute
     }
+    '/api/autumn': {
+      id: '/api/autumn'
+      path: '/api/autumn'
+      fullPath: '/api/autumn'
+      preLoaderRoute: typeof ApiAutumnRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/duckdb/query': {
       id: '/api/duckdb/query'
       path: '/api/duckdb/query'
       fullPath: '/api/duckdb/query'
       preLoaderRoute: typeof ApiDuckdbQueryRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/api/autumn/$': {
+      id: '/api/autumn/$'
+      path: '/$'
+      fullPath: '/api/autumn/$'
+      preLoaderRoute: typeof ApiAutumnSplatRouteImport
+      parentRoute: typeof ApiAutumnRouteRoute
     }
     '/_authed/table/$table': {
       id: '/_authed/table/$table'
@@ -134,9 +181,22 @@ const AuthedRouteRouteWithChildren = AuthedRouteRoute._addFileChildren(
   AuthedRouteRouteChildren,
 )
 
+interface ApiAutumnRouteRouteChildren {
+  ApiAutumnSplatRoute: typeof ApiAutumnSplatRoute
+}
+
+const ApiAutumnRouteRouteChildren: ApiAutumnRouteRouteChildren = {
+  ApiAutumnSplatRoute: ApiAutumnSplatRoute,
+}
+
+const ApiAutumnRouteRouteWithChildren = ApiAutumnRouteRoute._addFileChildren(
+  ApiAutumnRouteRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthedRouteRoute: AuthedRouteRouteWithChildren,
+  ApiAutumnRouteRoute: ApiAutumnRouteRouteWithChildren,
   ApiDuckdbQueryRoute: ApiDuckdbQueryRoute,
 }
 export const routeTree = rootRouteImport

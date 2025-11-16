@@ -250,12 +250,12 @@ export function InsightsPanel({
         flexDirection: 'column',
         height: '100%',
         backgroundColor: 'rgba(255,255,255,0.84)',
-        backdropFilter: 'blur(18px) saturate(150%)',
-        WebkitBackdropFilter: 'blur(18px) saturate(150%)',
-        border: '1px solid rgba(0,0,0,.18)',
+        // backdropFilter: 'blur(18px) saturate(150%)',
+        // WebkitBackdropFilter: 'blur(18px) saturate(150%)',
+        // border: '1px solid rgba(0,0,0,.18)',
         overflow: 'hidden',
-        borderRadius: 'var(--mantine-radius-lg)',
-        boxShadow: '0 2px 12px rgba(0,0,0,0.05)',
+        // borderRadius: 'var(--mantine-radius-lg)',
+        // boxShadow: '0 2px 12px rgba(0,0,0,0.05)',
       }}
     >
       <Stack

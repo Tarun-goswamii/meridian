@@ -8,14 +8,16 @@ import { action } from './_generated/server'
 import { v } from 'convex/values'
 import { checkAuth } from './authFns'
 import { z } from 'zod'
+import Firecrawl from '@mendable/firecrawl-js'
 import {
   queryDuckDB,
   getTableSchema,
   getSampleRows,
   createChart,
   generateInsights,
-  webSearch,
+  firecrawlSearch,
   scrapeWebPage,
+  extractWebPage,
   analyzeDataQuality,
   compareTables,
   getTableList,
@@ -62,7 +64,7 @@ export const fetchDuckDBQuery = action({
   args: { query: v.string() },
   handler: async (_, { query }) => {
     const serverUrl =
-      process.env.DUCKDB_SERVER_URL || 'https://7222d3476c71.ngrok-free.app'
+      process.env.DUCKDB_SERVER_URL || 'https://54709440de31.ngrok-free.app'
 
     const response = await fetch(`${serverUrl}/api/duckdb/query`, {
       method: 'POST',
@@ -80,87 +82,45 @@ export const fetchDuckDBQuery = action({
   },
 })
 
-// Action to perform web search
-export const performWebSearch = action({
+// Action to perform web search using Firecrawl
+export const performFirecrawlSearch = action({
   args: { query: v.string(), maxResults: v.optional(v.number()) },
-  handler: async (_, { query, maxResults = 5 }) => {
-    const apiKey = process.env.TAVILY_API_KEY || process.env.SERPER_API_KEY
+  handler: async (_, { query, maxResults = 10 }) => {
+    const apiKey = process.env.FIRECRAWL_API_KEY
     if (!apiKey) {
       throw new Error(
-        'Web search API key not configured. Set TAVILY_API_KEY or SERPER_API_KEY environment variable.',
+        'Firecrawl API key not configured. Set FIRECRAWL_API_KEY environment variable.',
       )
     }
 
-    // Try Tavily first (better for AI agents), fallback to Serper
-    if (process.env.TAVILY_API_KEY) {
-      const response = await fetch('https://api.tavily.com/search', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          query,
-          max_results: Math.min(maxResults, 10),
-          include_answer: true,
-          include_raw_content: false,
-        }),
+    try {
+      const firecrawl = new Firecrawl({ apiKey })
+      const result = await firecrawl.search(query, {
+        limit: Math.min(maxResults, 20),
       })
 
-      if (!response.ok) {
-        const text = await response.text().catch(() => '')
-        throw new Error(`Tavily API error: ${response.status} - ${text}`)
-      }
-
-      const result = await response.json()
       return {
         success: true,
         query,
-        answer: result.answer,
-        results: result.results || [],
+        results: result.web || [],
         sources:
-          result.results?.map((r: any) => ({
-            title: r.title,
-            url: r.url,
-            content: r.content,
+          result.web?.map((r: any) => ({
+            title: r.title || '',
+            url: r.url || '',
+            content: r.description || '',
           })) || [],
       }
-    } else {
-      // Fallback to Serper API
-      const response = await fetch('https://google.serper.dev/search', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-KEY': apiKey,
-        },
-        body: JSON.stringify({
-          q: query,
-          num: Math.min(maxResults, 10),
-        }),
-      })
-
-      if (!response.ok) {
-        const text = await response.text().catch(() => '')
-        throw new Error(`Serper API error: ${response.status} - ${text}`)
-      }
-
-      const result = await response.json()
+    } catch (error) {
       return {
-        success: true,
-        query,
-        answer: result.answerBox?.answer || result.answerBox?.snippet,
-        results: result.organic || [],
-        sources: (result.organic || []).map((r: any) => ({
-          title: r.title,
-          url: r.link,
-          content: r.snippet,
-        })),
+        success: false,
+        error:
+          error instanceof Error ? error.message : 'Unknown error occurred',
       }
     }
   },
 })
 
-// Action to scrape web page using Firecrawl
+// Action to scrape web page using Firecrawl SDK
 export const scrapeWebPageAction = action({
   args: { url: v.string(), includeMarkdown: v.optional(v.boolean()) },
   handler: async (_, { url, includeMarkdown = true }) => {
@@ -172,34 +132,63 @@ export const scrapeWebPageAction = action({
     }
 
     try {
-      const response = await fetch('https://api.firecrawl.dev/v0/scrape', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          url,
-          formats: includeMarkdown ? ['markdown', 'html'] : ['html'],
-          onlyMainContent: true,
-        }),
+      const firecrawl = new Firecrawl({ apiKey })
+      const result = await firecrawl.scrape(url, {
+        formats: includeMarkdown ? ['markdown', 'html'] : ['html'],
+        onlyMainContent: true,
       })
 
-      if (!response.ok) {
-        const text = await response.text().catch(() => '')
-        throw new Error(`Firecrawl API error: ${response.status} - ${text}`)
-      }
-
-      const result = await response.json()
       return {
         success: true,
         url,
-        title: result.data?.title || '',
-        markdown: result.data?.markdown || '',
-        html: result.data?.html || '',
-        content: result.data?.markdown || result.data?.html || '',
-        description: result.data?.description || '',
-        links: result.data?.links || [],
+        title: result.metadata?.title || '',
+        markdown: result.markdown || '',
+        html: result.html || '',
+        content: result.markdown || result.html || '',
+        description: result.metadata?.description || '',
+        links: result.links || [],
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : 'Unknown error occurred',
+      }
+    }
+  },
+})
+
+// Action to extract structured data from web pages using Firecrawl
+export const extractWebPageAction = action({
+  args: {
+    urls: v.array(v.string()),
+    prompt: v.string(),
+    schema: v.optional(v.any()),
+  },
+  handler: async (_, { urls, prompt, schema }) => {
+    const apiKey = process.env.FIRECRAWL_API_KEY
+    if (!apiKey) {
+      throw new Error(
+        'Firecrawl API key not configured. Set FIRECRAWL_API_KEY environment variable.',
+      )
+    }
+
+    try {
+      const firecrawl = new Firecrawl({ apiKey })
+      const result = await firecrawl.extract({
+        urls,
+        prompt,
+        schema: schema || undefined,
+      })
+
+      return {
+        success: true,
+        urls,
+        data: result.data
+          ? Array.isArray(result.data)
+            ? result.data
+            : [result.data]
+          : [],
       }
     } catch (error) {
       return {
@@ -428,9 +417,22 @@ Respond ONLY with a JSON object containing:
 1. "commands": an array of valid DuckDB SQL queries (steps can be split, but use at most 10 per request).
 2. "description": a concise summary of what the queries do (max 60 words).
 
-Always output valid DuckDB SQL.
+Always output valid DuckDB SQL. You also have access to a bunch of tools.
 `,
-  maxSteps: 3,
+  maxSteps: 4,
+  tools: {
+    queryDuckDB,
+    getTableSchema,
+    getSampleRows,
+    createChart,
+    generateInsights,
+    firecrawlSearch,
+    scrapeWebPage,
+    extractWebPage,
+    analyzeDataQuality,
+    compareTables,
+    getTableList,
+  },
 })
 
 // Analysis Agent - uses tools to explore database and provides answers
@@ -438,42 +440,26 @@ const analysis_agent = new Agent(components.agent, {
   name: 'analysis_agent',
   languageModel: model,
   instructions: `
-You are an intelligent assistant that helps users understand and analyze their database, and can also search the web and gather external information.
+You are an assistant that explores and analyzes databases and can search the web using Firecrawl.
 
-You have access to powerful tools that let you:
-- Query DuckDB to read data from tables
-- Get table schemas to understand structure
-- Get sample rows to see example data
-- Create charts to visualize data
-- Generate AI-powered insights from data analysis
-- Search the web for current information, facts, definitions, or external context
-- Scrape web pages to extract content from URLs
-- Analyze data quality (check for nulls, duplicates, etc.)
-- Compare two tables to find differences
-- List all available tables in the database
+Use the available tools to:
+- Query and inspect DuckDB tables
+- Visualize or analyze data
+- Search or extract info from the web and URLs
+- Assess data quality, compare tables, and list tables
 
-When a user asks a question:
-1. If the question requires external information, current events, definitions, or context not in the database, use the webSearch tool to find relevant information
-2. If the user provides a URL or asks to read a web page, use the scrapeWebPage tool
-3. Use database tools to explore the database and gather information
-4. Analyze the data you retrieve
-5. If the user asks to visualize data, create a chart, or show data graphically, use the createChart tool
-6. If the user asks for insights, patterns, or anomalies, use the generateInsights tool
-7. If the user asks about data quality, use the analyzeDataQuality tool
-8. If the user wants to compare tables, use the compareTables tool
-9. Provide a clear, helpful answer based on your findings
-
-Be thorough but efficient. Use tools strategically to gather the information needed to answer the user's question.
+Pick the right tools as needed, then answer clearly and efficiently.
 `,
-  maxSteps: 20,
+  maxSteps: 4,
   tools: {
     queryDuckDB,
     getTableSchema,
     getSampleRows,
     createChart,
     generateInsights,
-    webSearch,
+    firecrawlSearch,
     scrapeWebPage,
+    extractWebPage,
     analyzeDataQuality,
     compareTables,
     getTableList,
@@ -756,7 +742,7 @@ Please write a DuckDB SQL queries for the table "${tableName}" based on the user
           toolSteps: [],
         }
       }
-    // Analysis mode ------------------------------------------------------------------------------
+      // Analysis mode ------------------------------------------------------------------------------
     } else {
       // Analysis mode --------------------------------------------------------------------------------
       let contextualPrompt = `

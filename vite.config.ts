@@ -10,7 +10,7 @@ export default defineConfig({
     port: 3000,
     host: true,
     // Allow specific hosts, including '169d9edabf2c.ngrok-free.app'
-    allowedHosts: ['localhost', '127.0.0.1', '28ec673e8f8d.ngrok-free.app'],
+    allowedHosts: ['localhost', '127.0.0.1', '54709440de31.ngrok-free.app'],
   },
   plugins: [
     tailwindcss(),

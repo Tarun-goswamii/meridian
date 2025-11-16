@@ -334,32 +334,42 @@ export const generateInsights: any = createTool({
   },
 })
 
-// Tool to search the web
-export const webSearch: any = createTool({
+// Tool to search the web using Firecrawl
+export const firecrawlSearch: any = createTool({
   description:
-    'Search the web for information. Use this when you need current information, facts, or context that is not in the database. Great for looking up definitions, recent events, or external data.',
+    'Search the web for information using Firecrawl. Use this when you need current information, facts, or context that is not in the database. Great for looking up definitions, recent events, or external data.',
   args: z.object({
     query: z.string().describe('The search query to look up on the web'),
     maxResults: z
       .number()
       .optional()
-      .default(5)
-      .describe('Maximum number of results to return (default: 5, max: 10)'),
+      .default(10)
+      .describe('Maximum number of results to return (default: 10, max: 20)'),
   }),
   handler: async (ctx, args) => {
     try {
-      const maxResults = Math.min(Math.max(args.maxResults || 5, 1), 10)
-      const result = await ctx.runAction(api.table_agent.performWebSearch, {
-        query: args.query,
-        maxResults,
-      })
+      const maxResults = Math.min(Math.max(args.maxResults || 10, 1), 20)
+      const result = await ctx.runAction(
+        api.table_agent.performFirecrawlSearch,
+        {
+          query: args.query,
+          maxResults,
+        },
+      )
+
+      if (!result.success) {
+        return {
+          success: false,
+          error: result.error || 'Failed to search the web',
+        }
+      }
 
       return {
         success: true,
         query: args.query,
-        answer: result.answer || 'No direct answer available',
         sources: result.sources || [],
         sourceCount: result.sources?.length || 0,
+        results: result.results || [],
       }
     } catch (error) {
       return {
@@ -367,7 +377,7 @@ export const webSearch: any = createTool({
         error:
           error instanceof Error
             ? error.message
-            : 'Web search failed. Make sure TAVILY_API_KEY or SERPER_API_KEY is configured.',
+            : 'Web search failed. Make sure FIRECRAWL_API_KEY is configured.',
       }
     }
   },
@@ -376,7 +386,7 @@ export const webSearch: any = createTool({
 // Tool to scrape web pages using Firecrawl
 export const scrapeWebPage: any = createTool({
   description:
-    'Scrape and extract content from a web page. Use this when you need to get information from a specific URL, read article content, or extract data from websites. Returns clean markdown content.',
+    'Scrape and extract content from a web page using Firecrawl. Use this when you need to get information from a specific URL, read article content, or extract data from websites. Returns clean markdown content.',
   args: z.object({
     url: z.string().describe('The URL of the web page to scrape'),
     includeMarkdown: z
@@ -416,6 +426,59 @@ export const scrapeWebPage: any = createTool({
           error instanceof Error
             ? error.message
             : 'Web scraping failed. Make sure FIRECRAWL_API_KEY is configured.',
+      }
+    }
+  },
+})
+
+// Tool to extract structured data from web pages using Firecrawl
+export const extractWebPage: any = createTool({
+  description:
+    'Extract structured data from one or more web pages using Firecrawl. Use this when you need to extract specific information, structured data, or follow a schema from web pages. Great for extracting product information, article metadata, or any structured data from websites.',
+  args: z.object({
+    urls: z.array(z.string()).describe('Array of URLs to extract data from'),
+    prompt: z
+      .string()
+      .describe('A prompt describing what data to extract from the web pages'),
+    schema: z
+      .any()
+      .optional()
+      .describe(
+        'Optional JSON schema defining the structure of the data to extract',
+      ),
+  }),
+  handler: async (ctx, args) => {
+    try {
+      const result = await ctx.runAction(api.table_agent.extractWebPageAction, {
+        urls: args.urls,
+        prompt: args.prompt,
+        schema: args.schema,
+      })
+
+      if (!result.success) {
+        return {
+          success: false,
+          error: result.error || 'Failed to extract data from web pages',
+        }
+      }
+
+      return {
+        success: true,
+        urls: result.urls,
+        data: result.data || [],
+        extractedCount: Array.isArray(result.data)
+          ? result.data.length
+          : result.data
+            ? 1
+            : 0,
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Data extraction failed. Make sure FIRECRAWL_API_KEY is configured.',
       }
     }
   },

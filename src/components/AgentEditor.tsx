@@ -557,9 +557,9 @@ export function AgentEditor({
         backdropFilter: 'blur(10px)',
         WebkitBackdropFilter: 'blur(10px)',
         overflow: 'hidden',
-        border: '1px solid rgba(0, 0, 0, 0.1)',
-        borderRadius: 'var(--mantine-radius-md)',
-        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
+        // border: '1px solid rgba(0, 0, 0, 0.1)',
+        // borderRadius: 'var(--mantine-radius-md)',
+        // boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
         minWidth: 0,
         minHeight: 0,
         maxWidth: '100%',
@@ -572,8 +572,8 @@ export function AgentEditor({
       >
         {/* Header */}
         <Box
-          px={18}
-          py={11}
+          px={10}
+          pb={11}
           style={{
             borderBottom: '1px solid #E3E7ED',
             background: 'white',
@@ -585,27 +585,7 @@ export function AgentEditor({
           }}
         >
           <Stack gap={4}>
-            <Group justify="space-between" align="center" mb={1}>
-              <Group gap={8}>
-                <IconSparkles size={19} style={{ color: '#3772FF' }} />
-                <Text fw={600} size="md" style={{ letterSpacing: -0.5 }}>
-                  AI Agent
-                </Text>
-                {commandQueue.length > 0 && (
-                  <Badge
-                    size="sm"
-                    variant="light"
-                    color="blue"
-                    style={{
-                      fontWeight: 500,
-                      background: '#F5F8FE',
-                      border: 0,
-                    }}
-                  >
-                    {currentCommandIndex + 1} / {commandQueue.length}
-                  </Badge>
-                )}
-              </Group>
+            <Group justify="space-between" align="center">
               {remainingCommands.length > 0 && (
                 <ActionIcon
                   variant="subtle"
@@ -636,8 +616,7 @@ export function AgentEditor({
                     label: 'Analysis Agent',
                   },
                 ]}
-                size="xs"
-                fullWidth
+                size="sm"
                 styles={{
                   root: { maxWidth: 320, marginTop: 3 },
                   label: { fontWeight: 500, fontSize: 13 },

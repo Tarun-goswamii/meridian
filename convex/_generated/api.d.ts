@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as agent_tools from "../agent_tools.js";
 import type * as agent_utils from "../agent_utils.js";
 import type * as auth from "../auth.js";
 import type * as authFns from "../authFns.js";
@@ -33,6 +34,7 @@ import type {
  * ```
  */
 declare const fullApi: ApiFromModules<{
+  agent_tools: typeof agent_tools;
   agent_utils: typeof agent_utils;
   auth: typeof auth;
   authFns: typeof authFns;

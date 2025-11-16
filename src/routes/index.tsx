@@ -20,6 +20,7 @@ import {
 } from '@tabler/icons-react'
 import { motion } from 'motion/react'
 import classes from '@/public/styles/index.module.css'
+import { PricingTable } from 'autumn-js/react'
 
 export const Route = createFileRoute('/')({
   component: RouteComponent,
@@ -198,6 +199,8 @@ function RouteComponent() {
           Made with ❤️ for teams who want to move fast.
         </Text>
       </Container>
+
+      <PricingTable />
     </Container>
   )
 }

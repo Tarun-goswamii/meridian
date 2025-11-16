@@ -8,7 +8,7 @@ import * as React from 'react'
 import type { QueryClient } from '@tanstack/react-query'
 import { MantineProvider } from '@mantine/core'
 import { Notifications } from '@mantine/notifications'
-
+import { AutumnProvider } from 'autumn-js/react'
 import '@mantine/core/styles.css'
 import '@mantine/notifications/styles.css'
 import '@mantine/dropzone/styles.css'
@@ -71,8 +71,10 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         <MantineProvider>
-          <Notifications />
-          {children}
+          <AutumnProvider>
+            <Notifications />
+            {children}
+          </AutumnProvider>
         </MantineProvider>
 
         <Scripts />
