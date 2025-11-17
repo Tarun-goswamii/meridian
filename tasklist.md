@@ -17,3 +17,4 @@
 13. Cloudflare daalna padega
 14. Firecrawl dekhliyo aaram se
 15. Autumn bhi dekhliyo
+16. Maybe also fix charts and make the Rollback query remover thing
