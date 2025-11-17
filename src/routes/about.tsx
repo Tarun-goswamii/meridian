@@ -22,7 +22,6 @@ import {
   IconHeart,
   IconUsers,
   IconArrowRight,
-  IconDatabase,
   IconCode,
   IconChartBar,
 } from '@tabler/icons-react'

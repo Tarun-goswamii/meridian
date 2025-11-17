@@ -6,14 +6,12 @@ import {
   Anchor,
   Divider,
   Box,
-  rem,
   Image,
 } from '@mantine/core'
 import {
   IconBrandGithub,
   IconBrandTwitter,
   IconMail,
-  IconDatabase,
 } from '@tabler/icons-react'
 import { Link } from '@tanstack/react-router'
 

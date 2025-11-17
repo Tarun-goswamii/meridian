@@ -1,6 +1,6 @@
 import { mutation, query, action } from './_generated/server'
 import { v } from 'convex/values'
-import { Id } from './_generated/dataModel'
+import { type Id } from './_generated/dataModel'
 import { checkAuth } from './authFns'
 import { api } from './_generated/api'
 import Firecrawl from '@mendable/firecrawl-js'
@@ -269,7 +269,7 @@ export const createTableFromURL = action({
     rowCount: number
     columnCount: number
   }> => {
-    const user_id = await checkAuth(ctx)
+    await checkAuth(ctx)
     const apiKey = process.env.FIRECRAWL_API_KEY
 
     if (!apiKey) {

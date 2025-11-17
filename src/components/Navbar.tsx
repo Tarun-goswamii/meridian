@@ -19,7 +19,6 @@ import {
   Image,
 } from '@mantine/core'
 import {
-  IconDatabase,
   IconLogout,
   IconUser,
   IconChevronDown,

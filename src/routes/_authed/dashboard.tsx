@@ -51,7 +51,6 @@ import {
 import { useMutation } from 'convex/react'
 import { useEffect, useState } from 'react'
 import { useAuthActions } from '@convex-dev/auth/react'
-import { Link } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/_authed/dashboard')({
   component: Home,

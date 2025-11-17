@@ -23,7 +23,6 @@ import {
   IconChartBar,
   IconUpload,
   IconEdit,
-  IconDatabase,
   IconRocket,
   IconShield,
   IconCheck,

@@ -2,7 +2,6 @@ import { Dropzone, MIME_TYPES } from '@mantine/dropzone'
 import {
   Group,
   Text,
-  rem,
   Stack,
   Card,
   Box,
