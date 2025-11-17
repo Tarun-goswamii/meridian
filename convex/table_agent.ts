@@ -88,7 +88,8 @@ function describeColumns(columns: TableColumn[]): string {
 export const fetchDuckDBQuery = action({
   args: { query: v.string() },
   handler: async (_, { query }) => {
-    const serverUrl = 'https://6c961fbefc99.ngrok-free.app'
+    const serverUrl =
+      process.env.SITE_URL || 'https://6c961fbefc99.ngrok-free.app'
 
     const response = await fetch(`${serverUrl}/api/duckdb/query`, {
       method: 'POST',
