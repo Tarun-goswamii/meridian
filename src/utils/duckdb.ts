@@ -26,20 +26,16 @@ let duckDBInstance: DuckDBInstance | null = null
 
 export const getDuckDB = createServerOnlyFn(async () => {
   if (!duckDBInstance) {
-    const db = await DuckDBInstance.create(
-      `md:my_db?token=${process.env.MD_ACCESS_TOKEN}&home_directory=/tmp/duck`,
-    )
-    const conn = await db.connect()
+    const home = '/tmp/duck';
+    mkdirSync(home, { recursive: true });
 
-    mkdirSync('/tmp/duck', { recursive: true })
-
-    conn.run(`SET home_directory = '/tmp/duck'`)
-    conn.run(`SET extension_directory = '/tmp/duck'`)
-    conn.closeSync()
-    duckDBInstance = db
+    duckDBInstance = await DuckDBInstance.create(
+      `md:my_db?token=${process.env.MD_ACCESS_TOKEN}&home_directory=${home}`
+    );
   }
-  return duckDBInstance
-})
+  return duckDBInstance;
+});
+
 
 export const queryDuckDB = createServerFn()
   .inputValidator((query: string) => query)
