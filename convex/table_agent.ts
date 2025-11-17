@@ -63,8 +63,7 @@ function summarizeText(text: string, limit = 200) {
 export const fetchDuckDBQuery = action({
   args: { query: v.string() },
   handler: async (_, { query }) => {
-    const serverUrl =
-      process.env.DUCKDB_SERVER_URL || 'https://6c961fbefc99.ngrok-free.app'
+    const serverUrl = 'https://6c961fbefc99.ngrok-free.app'
 
     const response = await fetch(`${serverUrl}/api/duckdb/query`, {
       method: 'POST',

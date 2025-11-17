@@ -7,8 +7,8 @@
 4. Charts -- Live updating too ✅
 5. Autumn pricing ✅
 6. Deploy + Netlify ✅
-7. Firecrawl URL se table banaye
-8. UI + Landing
+7. Firecrawl URL se table banaye ✅
+8. UI + Landing ✅
 9. Perhaps try to make it git-like?
 10. Tables auto-connect
 11. Download your DB
