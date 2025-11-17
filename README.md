@@ -12,3 +12,9 @@ Collaborative platform for data science projects; for non-data science people. U
 2. Firecrawl (streaming)
 3. Git-like database rollbacks
 4. Collaborative workspaces
+
+---
+
+Firebase aise live-time chart scene nhi bitha sakta, but convex can do this + livetime
+Server side duck db was tanstack ka thing
+One problem with convex is: it's type-safe but then rollbacks are difficult

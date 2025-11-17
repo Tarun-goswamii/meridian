@@ -1,6 +1,11 @@
 import { Title, Group, Badge } from '@mantine/core'
 import { ColumnsMenu } from './ColumnsMenu'
 import type { ColumnDef } from '@tanstack/react-table'
+import FacePile from '@convex-dev/presence/facepile'
+import { api } from '@/convex/_generated/api'
+import { useSuspenseQuery } from '@tanstack/react-query'
+import { convexQuery } from '@convex-dev/react-query'
+import usePresence from '@convex-dev/presence/react'
 
 interface TableHeaderProps {
   tableName: string
@@ -19,6 +24,16 @@ export function TableHeader({
   columnVisibility,
   onVisibilityChange,
 }: TableHeaderProps) {
+  const user = useSuspenseQuery(convexQuery(api.authFns.currentUser, {}))
+
+  // Use table-specific room ID for presence
+  const roomId = `table:${tableName}`
+  const presenceState = usePresence(
+    api.presence,
+    roomId,
+    user?.data?.userId ?? 'User ' + Math.floor(Math.random() * 10000),
+  )
+
   return (
     <Group justify="space-between" align="center" wrap="nowrap">
       <Group gap="xs">
@@ -55,18 +70,22 @@ export function TableHeader({
           onVisibilityChange={onVisibilityChange}
         />
       </Group>
-      <Badge
-        size="md"
-        variant="filled"
-        color="blue"
-        style={{
-          fontWeight: 600,
-          textTransform: 'none',
-          letterSpacing: '0.01em',
-        }}
-      >
-        {rowCount.toLocaleString()} row{rowCount === 1 ? '' : 's'}
-      </Badge>
+
+      <Group gap={20}>
+        <FacePile presenceState={presenceState ?? []} />
+        <Badge
+          size="md"
+          variant="filled"
+          color="blue"
+          style={{
+            fontWeight: 600,
+            textTransform: 'none',
+            letterSpacing: '0.01em',
+          }}
+        >
+          {rowCount.toLocaleString()} row{rowCount === 1 ? '' : 's'}
+        </Badge>
+      </Group>
     </Group>
   )
 }

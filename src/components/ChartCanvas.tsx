@@ -73,21 +73,21 @@ function DraggableChart({
   }
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    // Only start dragging if clicking on the drag handle or header area
     const target = e.target as HTMLElement
     if (
       target.closest('[data-drag-handle]') ||
       target.closest('[data-chart-header]')
     ) {
-      // Don't start drag if clicking the remove button
       if (target.closest('button') && !target.closest('[data-drag-handle]')) {
         return
       }
+
       setIsDragging(true)
       setDragStart({
-        x: e.clientX - position.x,
+        x: e.clientX - position.x, // Keep this as offset from current position
         y: e.clientY - position.y,
       })
+
       e.preventDefault()
       e.stopPropagation()
     }

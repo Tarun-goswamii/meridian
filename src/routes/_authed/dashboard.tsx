@@ -1,6 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { Navbar } from '@/src/components/Navbar'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useSuspenseQuery } from '@tanstack/react-query'
 import { convexQuery } from '@convex-dev/react-query'
 import { api } from '@/convex/_generated/api'
 import FileUpload from '../../components/dashboard/FileUpload'
@@ -8,7 +7,6 @@ import {
   Group,
   Text,
   Card,
-  List,
   ThemeIcon,
   ActionIcon,
   Button,
@@ -28,6 +26,9 @@ import {
   ScrollArea,
   TextInput,
   Kbd,
+  Container,
+  SimpleGrid,
+  rem,
 } from '@mantine/core'
 import {
   IconFile,
@@ -36,35 +37,21 @@ import {
   IconDatabase,
   IconUser,
   IconChevronDown,
-  IconPlaylistAdd,
   IconCopy,
-  IconAlertCircle,
-  IconBell,
   IconSettings,
   IconChartBar,
   IconStar,
   IconSearch,
   IconClock,
-  IconUsers,
   IconDeviceAnalytics,
   IconCheck,
   IconBook,
+  IconLogout,
 } from '@tabler/icons-react'
 import { useMutation } from 'convex/react'
 import { useEffect, useState } from 'react'
-
-function getRandomAvatar() {
-  const avatars = [
-    'https://randomuser.me/api/portraits/men/45.jpg',
-    'https://randomuser.me/api/portraits/women/44.jpg',
-    'https://randomuser.me/api/portraits/men/30.jpg',
-    'https://randomuser.me/api/portraits/women/65.jpg',
-    'https://randomuser.me/api/portraits/men/34.jpg',
-    'https://randomuser.me/api/portraits/women/16.jpg',
-    'https://randomuser.me/api/portraits/men/57.jpg',
-  ]
-  return avatars[Math.floor(Math.random() * avatars.length)]
-}
+import { useAuthActions } from '@convex-dev/auth/react'
+import { Link } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/_authed/dashboard')({
   component: Home,
@@ -75,6 +62,12 @@ function Home() {
   const [sidebarTab, setSidebarTab] = useState('activity')
   const [searchOpened, setSearchOpened] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const { signOut } = useAuthActions()
+
+  // Get current user
+  const { data: user } = useSuspenseQuery(
+    convexQuery(api.authFns.currentUser, {}),
+  )
 
   // Query to get uploaded files
   const { data: files = [] } = useQuery(convexQuery(api.csv.getFiles, {}))
@@ -106,96 +99,62 @@ function Home() {
     return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i]
   }
 
-  // Pretend analytics data
   const analytics = [
     {
       title: 'Files Uploaded',
       value: files.length,
-      icon: <IconUpload size={22} color="#1971c2" />,
+      icon: IconUpload,
       accent: 'blue',
-    },
-    {
-      title: 'Active Users',
-      value: 7,
-      icon: <IconUsers size={22} color="#228be6" />,
-      accent: 'indigo',
     },
     {
       title: 'Total Tables',
       value: files.filter((f) => f.duckdbProcessed).length,
-      icon: <IconDatabase size={22} color="#2f9e44" />,
+      icon: IconDatabase,
       accent: 'green',
     },
     {
       title: 'Processing',
       value: files.filter((f) => !f.duckdbProcessed).length,
-      icon: <IconDeviceAnalytics size={22} color="#e8590c" />,
+      icon: IconDeviceAnalytics,
       accent: 'orange',
     },
-  ]
-
-  const fakeRecentActivity = [
     {
-      id: 1,
-      user: 'Jane Doe',
-      avatar: getRandomAvatar(),
-      action: 'uploaded a new file',
-      target: 'sales-q2.xlsx',
-      time: '2m ago',
-    },
-    {
-      id: 2,
-      user: 'Mike Smith',
-      avatar: getRandomAvatar(),
-      action: 'deleted file',
-      target: 'analytics.csv',
-      time: '20m ago',
-    },
-    {
-      id: 3,
-      user: 'You',
-      avatar: getRandomAvatar(),
-      action: 'created a table',
-      target: 'invoices_2024',
-      time: 'an hour ago',
+      title: 'Total Size',
+      value: formatFileSize(files.reduce((acc, f) => acc + f.fileSize, 0)),
+      icon: IconChartBar,
+      accent: 'teal',
     },
   ]
 
-  const trendingFiles = files.slice(0, 3)
+  const recentActivity = files.slice(0, 5).map((file) => ({
+    id: file._id,
+    action: file.duckdbProcessed ? 'processed' : 'uploaded',
+    target: file.fileName,
+    time: new Date(file.uploadedAt).toLocaleDateString(),
+  }))
+
+  const trendingFiles = files.filter((f) => f.duckdbProcessed).slice(0, 5)
 
   const handleUploadComplete = () => {
     setUploadModalOpened(false)
   }
 
-  // FAKE notifications
-  const fakeNotifications = [
-    {
-      id: 1,
-      title: 'Your import was successful!',
-      description: 'File data2024.xlsx is now available as a table.',
-      icon: <IconCheck size={18} color="#2f9e44" />,
-      color: 'green',
-    },
-    {
-      id: 2,
-      title: 'Error processing market.csv',
-      description: 'Please try again later.',
-      icon: <IconAlertCircle size={18} color="#c92a2a" />,
-      color: 'red',
-    },
-  ]
+  const notifications = files
+    .filter((f) => f.duckdbProcessed)
+    .slice(0, 2)
+    .map((file) => ({
+      id: file._id,
+      title: 'File processed successfully',
+      description: `${file.fileName} is now available as a table.`,
+      icon: <IconCheck size={18} />,
+      color: 'green' as const,
+    }))
 
-  // Quick actions
   const quickActions = [
     {
       label: 'Upload File',
       icon: <IconUpload size={18} />,
       onClick: () => setUploadModalOpened(true),
-    },
-    {
-      label: 'Create Table',
-      icon: <IconPlaylistAdd size={18} />,
-      onClick: () => alert('Not implemented!'),
     },
     {
       label: 'View Docs',
@@ -232,603 +191,551 @@ function Home() {
           action.label.toLowerCase().includes(searchQuery.toLowerCase()),
         )
 
-  // For fake progress
-  const total = files.length + 5
   const processed = files.filter((f) => f.duckdbProcessed).length
-  const percent =
-    total === 0 ? 0 : Math.min(100, Math.round((processed / total) * 100))
+  const total = files.length
+  const percent = total === 0 ? 0 : Math.round((processed / total) * 100)
 
   return (
-    <Box style={{ minHeight: '100vh', backgroundColor: '#f6f8fa' }}>
-      <Navbar />
+    <Box
+      style={{
+        minHeight: '100vh',
+        backgroundColor: 'var(--mantine-color-gray-0)',
+      }}
+    >
       {/* Spotlight / Command Palette */}
-      <Paper
-        shadow="sm"
-        p={12}
-        radius="md"
-        style={{
-          position: 'fixed',
-          top: 80,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          minWidth: 340,
-          maxWidth: 560,
-          width: '100%',
-          zIndex: 500,
-          backgroundColor: 'white',
-          border: '1px solid #ececec',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.06)',
-          display: searchOpened ? 'block' : 'none',
-        }}
-      >
-        <Stack gap={8}>
-          <Group gap={8} align="center">
-            <TextInput
-              placeholder="Search files, tables, quick actions..."
-              leftSection={<IconSearch size={16} />}
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.currentTarget.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' && filteredSpotlightActions[0]) {
-                  filteredSpotlightActions[0].onClick()
-                  setSearchOpened(false)
-                  setSearchQuery('')
-                }
-              }}
-              autoFocus
-              style={{ flex: 1 }}
-            />
-            <Group gap={4}>
-              <Kbd>Ctrl</Kbd>
-              <Text size="xs" c="dimmed">
-                or
-              </Text>
-              <Kbd>Cmd</Kbd>
-              <Text size="xs" c="dimmed">
-                +
-              </Text>
-              <Kbd>K</Kbd>
-            </Group>
-            <Button
-              variant="subtle"
-              size="xs"
-              color="gray"
-              onClick={() => setSearchOpened(false)}
-            >
-              Esc
-            </Button>
-          </Group>
-          <ScrollArea h={220}>
-            {filteredSpotlightActions.length === 0 ? (
-              <Text size="xs" c="dimmed" ta="center" py={6}>
-                No results. Try a different query.
-              </Text>
-            ) : (
-              <Stack gap={4}>
-                {filteredSpotlightActions.map((action, index) => (
-                  <Paper
-                    key={index}
-                    withBorder
-                    radius="sm"
-                    p={6}
-                    style={{ cursor: 'pointer' }}
-                    onClick={() => {
-                      action.onClick()
-                      setSearchOpened(false)
-                      setSearchQuery('')
-                    }}
-                  >
-                    <Group gap={8}>
-                      {action.icon}
-                      <Text size="sm">{action.label}</Text>
-                    </Group>
-                  </Paper>
-                ))}
-              </Stack>
-            )}
-          </ScrollArea>
-        </Stack>
-      </Paper>
-
-      <Box
-        style={{
-          display: 'flex',
-          minHeight: 'calc(100vh - 60px)',
-        }}
-      >
-        {/* Sidebar */}
-        <Stack
+      {searchOpened && (
+        <Paper
+          shadow="md"
           p="md"
-          bg="white"
+          radius="md"
           style={{
-            width: 270,
-            flexShrink: 0,
-            height: 'calc(100vh - 60px)',
-            borderRight: '1px solid #eee',
-            position: 'sticky',
-            top: 60,
-            alignSelf: 'flex-start',
-            zIndex: 20,
-            boxShadow: '0 1px 1px rgba(22,22,22,0.02)',
-            overflowY: 'auto',
-          }}
-          gap="xl"
-        >
-          <Group align="center" gap="xs">
-            <Avatar src={getRandomAvatar()} radius="xl" />
-            <Box>
-              <Text fw={500}>Welcome back</Text>
-              <Text size="xs" c="dimmed">
-                {['You', 'Jane Doe', 'Mike'].sort(() => Math.random() - 0.5)[0]}
-              </Text>
-            </Box>
-            <Menu shadow="xs" position="bottom-end">
-              <Menu.Target>
-                <ActionIcon variant="light" color="dark">
-                  <IconChevronDown size={18} />
-                </ActionIcon>
-              </Menu.Target>
-              <Menu.Dropdown>
-                <Menu.Label>Account</Menu.Label>
-                <Menu.Item leftSection={<IconUser size={16} />}>
-                  Profile
-                </Menu.Item>
-                <Menu.Item leftSection={<IconSettings size={16} />}>
-                  Settings
-                </Menu.Item>
-                <Menu.Divider />
-                <Menu.Item color="red">Logout</Menu.Item>
-              </Menu.Dropdown>
-            </Menu>
-          </Group>
-          <Divider mb={0} />
-          <SegmentedControl
-            value={sidebarTab}
-            onChange={setSidebarTab}
-            data={[
-              {
-                value: 'activity',
-                label: (
-                  <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <IconClock size={16} />
-                    Activity
-                  </div>
-                ),
-              },
-              {
-                value: 'settings',
-                label: (
-                  <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <IconSettings size={16} />
-                    Settings
-                  </div>
-                ),
-              },
-            ]}
-            fullWidth
-            radius="md"
-            style={{ marginBottom: 6 }}
-          />
-          {/* Demo: Activity feed/faux notifications */}
-          <ScrollArea h={270}>
-            {sidebarTab === 'activity' && (
-              <Stack gap="xs">
-                {fakeRecentActivity.map((a) => (
-                  <Paper key={a.id} shadow="xs" p={10} radius="md" withBorder>
-                    <Group align="center">
-                      <Avatar src={a.avatar} radius="xl" size={32} />
-                      <Text size="sm">
-                        <b>{a.user}</b> {a.action} <b>{a.target}</b>
-                      </Text>
-                      <Text size="xs" c="dimmed" ml="auto">
-                        {a.time}
-                      </Text>
-                    </Group>
-                  </Paper>
-                ))}
-              </Stack>
-            )}
-            {sidebarTab === 'starred' && (
-              <Text c="dimmed" size="sm" ta="center">
-                No starred items yet.
-              </Text>
-            )}
-            {sidebarTab === 'settings' && (
-              <Stack>
-                <Text size="sm" fw={600}>
-                  User Preferences
-                </Text>
-                <Button size="xs" variant="light" color="dark">
-                  Customize Dashboard
-                </Button>
-                <Button size="xs" variant="light" color="red">
-                  Delete Account
-                </Button>
-              </Stack>
-            )}
-          </ScrollArea>
-          <Divider />
-          <Group gap={8}>
-            {quickActions.map((qa, i) => (
-              <Tooltip key={i} label={qa.label} withArrow>
-                <ActionIcon
-                  size="lg"
-                  variant="light"
-                  color="blue"
-                  onClick={qa.onClick}
-                >
-                  {qa.icon}
-                </ActionIcon>
-              </Tooltip>
-            ))}
-          </Group>
-        </Stack>
-
-        {/* Main dashboard area */}
-        <Box
-          style={{
-            flex: 1,
-            padding: '28px 24px 32px',
-            minWidth: 0,
-            maxWidth: 'calc(100vw - 270px)',
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            minWidth: rem(400),
+            maxWidth: rem(600),
+            width: '90%',
+            zIndex: 1000,
+            backgroundColor: 'white',
+            border: '1px solid var(--mantine-color-gray-2)',
           }}
         >
-          <Stack gap="lg">
-            <Group justify="space-between" align="flex-start" wrap="wrap">
-              <Box>
-                <Text
-                  fw={900}
-                  size="2.1rem"
-                  style={{ letterSpacing: -1, marginBottom: -8 }}
-                >
-                  Dashboard
+          <Stack gap="md">
+            <Group gap="sm" align="center">
+              <TextInput
+                placeholder="Search files, tables, quick actions..."
+                leftSection={<IconSearch size={16} />}
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.currentTarget.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && filteredSpotlightActions[0]) {
+                    filteredSpotlightActions[0].onClick()
+                    setSearchOpened(false)
+                    setSearchQuery('')
+                  }
+                }}
+                autoFocus
+                style={{ flex: 1 }}
+              />
+              <Group gap={4}>
+                <Kbd>Ctrl</Kbd>
+                <Text size="xs" c="dimmed">
+                  +
                 </Text>
-                <Text c="dimmed" size="md" mb="xs">
-                  Visualize & manage your files, tables, users
-                </Text>
-                <Group gap={8}>
-                  <Badge
-                    color="teal"
-                    variant="light"
-                    size="sm"
-                    leftSection={<IconBell size={12} />}
-                  >
-                    New
-                  </Badge>
-                  <Badge
-                    color="indigo"
-                    variant="light"
-                    size="sm"
-                    leftSection={<IconDatabase size={12} />}
-                  >
-                    {processed} processed
-                  </Badge>
-                  <Badge color="gray" variant="outline" size="sm">
-                    {files.length} total files
-                  </Badge>
-                </Group>
-              </Box>
+                <Kbd>K</Kbd>
+              </Group>
               <Button
-                size="md"
-                color="blue"
-                leftSection={<IconUpload size={20} />}
-                onClick={() => setUploadModalOpened(true)}
+                variant="subtle"
+                size="xs"
+                color="gray"
+                onClick={() => setSearchOpened(false)}
               >
-                Upload File
+                Esc
               </Button>
             </Group>
+            <ScrollArea h={rem(220)}>
+              {filteredSpotlightActions.length === 0 ? (
+                <Text size="sm" c="dimmed" ta="center" py="md">
+                  No results. Try a different query.
+                </Text>
+              ) : (
+                <Stack gap="xs">
+                  {filteredSpotlightActions.map((action, index) => (
+                    <Paper
+                      key={index}
+                      withBorder
+                      radius="sm"
+                      p="sm"
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => {
+                        action.onClick()
+                        setSearchOpened(false)
+                        setSearchQuery('')
+                      }}
+                    >
+                      <Group gap="sm">
+                        {action.icon}
+                        <Text size="sm">{action.label}</Text>
+                      </Group>
+                    </Paper>
+                  ))}
+                </Stack>
+              )}
+            </ScrollArea>
+          </Stack>
+        </Paper>
+      )}
 
-            {/* Notification fake alert */}
-            <Group gap="xs" wrap="wrap">
-              {fakeNotifications.map((n, idx) => (
-                <Alert
-                  key={idx}
-                  icon={n.icon}
-                  color={n.color}
-                  title={n.title}
-                  radius="md"
-                  style={{ flex: 1 }}
+      <Container size="xl" p="xl">
+        <Box
+          style={{
+            display: 'flex',
+            gap: rem(24),
+            minHeight: 'calc(100vh - 4rem)',
+          }}
+        >
+          {/* Sidebar */}
+          <Stack
+            p="lg"
+            bg="white"
+            style={{
+              width: rem(280),
+              flexShrink: 0,
+              border: '1px solid var(--mantine-color-gray-2)',
+              borderRadius: rem(8),
+              height: 'fit-content',
+              position: 'sticky',
+              top: rem(80),
+            }}
+            gap="lg"
+          >
+            <Group gap="sm">
+              <Avatar
+                color="blue"
+                radius="xl"
+                size="md"
+                style={{
+                  border: '2px solid var(--mantine-color-gray-2)',
+                }}
+              >
+                {user.name?.charAt(0).toUpperCase() || 'U'}
+              </Avatar>
+              <Box style={{ flex: 1 }}>
+                <Text fw={500} size="sm">
+                  {user.name || 'User'}
+                </Text>
+                <Text size="xs" c="dimmed">
+                  {user.email || 'No email'}
+                </Text>
+              </Box>
+              <Menu shadow="md" width={200} position="bottom-end">
+                <Menu.Target>
+                  <ActionIcon variant="subtle" color="gray">
+                    <IconChevronDown size={18} />
+                  </ActionIcon>
+                </Menu.Target>
+                <Menu.Dropdown>
+                  <Menu.Label>Account</Menu.Label>
+                  <Menu.Item leftSection={<IconUser size={16} />}>
+                    Profile
+                  </Menu.Item>
+                  <Menu.Item leftSection={<IconSettings size={16} />}>
+                    Settings
+                  </Menu.Item>
+                  <Menu.Divider />
+                  <Menu.Item
+                    color="red"
+                    leftSection={<IconLogout size={16} />}
+                    onClick={() => void signOut()}
+                  >
+                    Sign out
+                  </Menu.Item>
+                </Menu.Dropdown>
+              </Menu>
+            </Group>
+
+            <Divider />
+
+            <SegmentedControl
+              value={sidebarTab}
+              onChange={setSidebarTab}
+              data={[
+                {
+                  value: 'activity',
+                  label: (
+                    <Group gap="xs">
+                      <IconClock size={16} />
+                      <Text size="sm">Activity</Text>
+                    </Group>
+                  ),
+                },
+                {
+                  value: 'settings',
+                  label: (
+                    <Group gap="xs">
+                      <IconSettings size={16} />
+                      <Text size="sm">Settings</Text>
+                    </Group>
+                  ),
+                },
+              ]}
+              fullWidth
+              radius="md"
+            />
+
+            <ScrollArea h={rem(300)}>
+              {sidebarTab === 'activity' && (
+                <Stack gap="xs">
+                  {recentActivity.length === 0 ? (
+                    <Text size="sm" c="dimmed" ta="center" py="md">
+                      No recent activity
+                    </Text>
+                  ) : (
+                    recentActivity.map((a) => (
+                      <Paper key={a.id} p="sm" radius="md" withBorder>
+                        <Stack gap="xs">
+                          <Text size="sm">
+                            File{' '}
+                            <Text span fw={600}>
+                              {a.target}
+                            </Text>{' '}
+                            was {a.action}
+                          </Text>
+                          <Text size="xs" c="dimmed">
+                            {a.time}
+                          </Text>
+                        </Stack>
+                      </Paper>
+                    ))
+                  )}
+                </Stack>
+              )}
+              {sidebarTab === 'settings' && (
+                <Stack gap="sm">
+                  <Text size="sm" fw={600}>
+                    Preferences
+                  </Text>
+                  <Button size="sm" variant="light" fullWidth>
+                    Customize Dashboard
+                  </Button>
+                </Stack>
+              )}
+            </ScrollArea>
+
+            <Divider />
+
+            <Group gap="xs">
+              {quickActions.map((qa, i) => (
+                <Tooltip key={i} label={qa.label} withArrow>
+                  <ActionIcon
+                    size="lg"
+                    variant="light"
+                    color="blue"
+                    onClick={qa.onClick}
+                  >
+                    {qa.icon}
+                  </ActionIcon>
+                </Tooltip>
+              ))}
+            </Group>
+          </Stack>
+
+          {/* Main dashboard area */}
+          <Box style={{ flex: 1, minWidth: 0 }}>
+            <Stack gap="xl">
+              {/* Header */}
+              <Group justify="space-between" align="flex-start" wrap="wrap">
+                <Box>
+                  <Text fw={900} size={rem(32)} mb="xs">
+                    Dashboard
+                  </Text>
+                  <Text c="dimmed" size="sm" mb="md">
+                    Manage your files and data tables
+                  </Text>
+                  <Group gap="sm">
+                    <Badge
+                      color="blue"
+                      variant="light"
+                      size="sm"
+                      leftSection={<IconDatabase size={12} />}
+                    >
+                      {processed} processed
+                    </Badge>
+                    <Badge color="gray" variant="outline" size="sm">
+                      {total} total files
+                    </Badge>
+                  </Group>
+                </Box>
+                <Button
+                  size="md"
+                  leftSection={<IconUpload size={18} />}
+                  onClick={() => setUploadModalOpened(true)}
                 >
-                  <Group gap={8} align="center">
-                    <Text size="sm">{n.description}</Text>
-                    <Button size="xs" variant="light" color="gray">
-                      Dismiss
+                  Upload File
+                </Button>
+              </Group>
+
+              {/* Notifications */}
+              {notifications.length > 0 && (
+                <Stack gap="sm">
+                  {notifications.map((n) => (
+                    <Alert
+                      key={n.id}
+                      icon={n.icon}
+                      color={n.color}
+                      title={n.title}
+                      radius="md"
+                    >
+                      <Text size="sm">{n.description}</Text>
+                    </Alert>
+                  ))}
+                </Stack>
+              )}
+
+              {/* Analytics cards */}
+              <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md">
+                {analytics.map((stat, idx) => (
+                  <Card
+                    key={idx}
+                    withBorder
+                    shadow="sm"
+                    radius="md"
+                    p="lg"
+                    style={{ backgroundColor: 'white' }}
+                  >
+                    <Group gap="sm" mb="xs">
+                      <ThemeIcon
+                        color={stat.accent}
+                        size="lg"
+                        radius="md"
+                        variant="light"
+                      >
+                        <stat.icon size={20} />
+                      </ThemeIcon>
+                      <Text size={rem(24)} fw={700}>
+                        {stat.value}
+                      </Text>
+                    </Group>
+                    <Text size="xs" c="dimmed">
+                      {stat.title}
+                    </Text>
+                  </Card>
+                ))}
+              </SimpleGrid>
+
+              {/* Progress */}
+              {total > 0 && (
+                <Card withBorder shadow="sm" radius="md" p="md" bg="white">
+                  <Group justify="space-between" mb="sm">
+                    <Group gap="xs">
+                      <IconChartBar size={18} />
+                      <Text size="sm" fw={600}>
+                        Processing Progress
+                      </Text>
+                    </Group>
+                    <Text size="xs" c="dimmed">
+                      {processed} of {total} files processed
+                    </Text>
+                  </Group>
+                  <Progress value={percent} size="md" radius="md" />
+                </Card>
+              )}
+
+              {/* Files and Trending */}
+              <Group align="flex-start" gap="md" wrap="nowrap">
+                {/* Uploaded Files */}
+                <Card
+                  withBorder
+                  shadow="sm"
+                  radius="md"
+                  p="lg"
+                  style={{ flex: 2, backgroundColor: 'white', minWidth: 0 }}
+                >
+                  <Group justify="space-between" mb="md">
+                    <Text size="lg" fw={700}>
+                      Uploaded Files
+                    </Text>
+                    <Button
+                      variant="outline"
+                      size="xs"
+                      leftSection={<IconUpload size={14} />}
+                      onClick={() => setUploadModalOpened(true)}
+                    >
+                      New Upload
                     </Button>
                   </Group>
-                </Alert>
-              ))}
-            </Group>
-
-            {/* Analytics cards */}
-            <Group gap="md" align="stretch" wrap="wrap">
-              {analytics.map((stat, idx) => (
-                <Card
-                  key={idx}
-                  withBorder
-                  w={220}
-                  shadow="xs"
-                  radius="lg"
-                  p="md"
-                  style={{ flex: 1, background: 'white' }}
-                >
-                  <Group align="center" gap="xs" mb="xs">
-                    <ThemeIcon
-                      color={stat.accent}
-                      size="lg"
-                      radius="xl"
-                      variant="light"
-                    >
-                      {stat.icon}
-                    </ThemeIcon>
-                    <Text size="lg" fw={700}>
-                      {stat.value}
-                    </Text>
-                  </Group>
-                  <Text size="xs" c="dimmed">
-                    {stat.title}
-                  </Text>
-                </Card>
-              ))}
-            </Group>
-
-            {/* Progress to next milestone */}
-            <Box mb="md">
-              <Group gap={8} align="center">
-                <Text size="sm" fw={600}>
-                  File Processing Progress
-                </Text>
-                <IconChartBar size={18} color="#1971c2" />
-                <Text size="xs" c="dimmed">
-                  {processed} of {total} done
-                </Text>
-              </Group>
-              <Progress value={percent} size="xs" mt={6} radius="lg" />
-            </Box>
-
-            <Group gap="md" align="flex-start" wrap="nowrap">
-              {/* Uploaded Files List */}
-              <Card
-                shadow="sm"
-                radius="md"
-                withBorder
-                style={{
-                  flex: 2,
-                  backgroundColor: 'white',
-                  minWidth: 0,
-                  overflow: 'auto',
-                }}
-                p="md"
-              >
-                <Group justify="space-between" mb="md">
-                  <Text size="lg" fw={700}>
-                    Uploaded Files
-                  </Text>
-                  <Button
-                    variant="outline"
-                    size="xs"
-                    leftSection={<IconUpload size={15} />}
-                    onClick={() => setUploadModalOpened(true)}
-                  >
-                    New Upload
-                  </Button>
-                </Group>
-                {files.length === 0 ? (
-                  <Text c="dimmed" ta="center" py="lg">
-                    No files yet. Upload your first file!
-                  </Text>
-                ) : (
-                  <List style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
-                    {files.map((file) => (
-                      <List.Item
-                        key={file._id}
-                        style={{
-                          border: '2px solid #eee',
-                          borderRadius: 6,
-                          padding: 12,
-                          minWidth: 230,
-                          background: '#fafdff',
-                          marginBottom: 9,
-                        }}
-                        icon={
-                          <ThemeIcon color="blue" size={28} radius="xl">
-                            <IconFile size={18} />
-                          </ThemeIcon>
-                        }
-                      >
-                        <Stack gap={3} style={{ minHeight: 64 }}>
-                          <Group gap={6} align="center">
-                            <Text
-                              size="sm"
-                              fw={600}
-                              style={{
-                                flex: 1,
-                                textOverflow: 'ellipsis',
-                                overflow: 'hidden',
-                                whiteSpace: 'nowrap',
-                              }}
-                            >
-                              {file.fileName}
-                            </Text>
-                            {file.duckdbProcessed && (
-                              <Badge
-                                size="xs"
-                                leftSection={<IconDatabase size={12} />}
-                                color="green"
-                                variant="light"
-                              >
-                                {file.duckdbTableName}
-                              </Badge>
-                            )}
-                          </Group>
-                          <Text size="xs" c="dimmed">
-                            {formatFileSize(file.fileSize)} •{' '}
-                            {new Date(file.uploadedAt).toLocaleString()}
-                          </Text>
-                          <Group gap="xs">
-                            <Tooltip label="Open Table" withArrow>
-                              <Button
-                                size="xs"
-                                variant="light"
-                                color={file.duckdbProcessed ? 'blue' : 'gray'}
-                                component="a"
-                                disabled={!file.duckdbProcessed}
-                                href={
-                                  file.duckdbProcessed
-                                    ? `/table/${encodeURIComponent(file.duckdbTableName!)}`
-                                    : undefined
-                                }
-                                target="_blank"
-                              >
-                                View Table
-                              </Button>
-                            </Tooltip>
-                            <CopyButton value={file.fileName}>
-                              {({ copied, copy }) => (
-                                <Tooltip
-                                  label={copied ? 'Copied!' : 'Copy filename'}
-                                  withArrow
-                                >
-                                  <ActionIcon
-                                    color={copied ? 'green' : 'gray'}
-                                    variant="subtle"
-                                    onClick={copy}
-                                  >
-                                    <IconCopy size={18} />
-                                  </ActionIcon>
-                                </Tooltip>
-                              )}
-                            </CopyButton>
-                            <Tooltip label="Delete file" withArrow>
-                              <ActionIcon
-                                color="red"
-                                variant="subtle"
-                                onClick={() =>
-                                  void deleteFile({ fileId: file._id })
-                                }
-                              >
-                                <IconTrash size={18} />
-                              </ActionIcon>
-                            </Tooltip>
-                          </Group>
-                        </Stack>
-                      </List.Item>
-                    ))}
-                  </List>
-                )}
-              </Card>
-
-              {/* "Trending uploads" / fake widgets column */}
-              <Stack gap="md" style={{ flex: 1, minWidth: 300 }}>
-                {/* Trending Cards */}
-                <Card
-                  withBorder
-                  radius="md"
-                  shadow="xs"
-                  p="md"
-                  style={{ background: 'white' }}
-                >
-                  <Group justify="space-between" mb={4}>
-                    <Text fw={700} size="md">
-                      Trending Uploads
-                    </Text>
-                    <ThemeIcon color="teal" size="sm" radius="xl">
-                      <IconStar size={15} />
-                    </ThemeIcon>
-                  </Group>
-                  <Divider mb="sm" />
-                  <Stack gap={5}>
-                    {trendingFiles.length === 0 ? (
-                      <Text size="xs" c="dimmed" ta="center">
-                        No uploads yet
+                  {files.length === 0 ? (
+                    <Box py="xl" ta="center">
+                      <IconFile size={48} color="var(--mantine-color-gray-4)" />
+                      <Text c="dimmed" mt="md" size="sm">
+                        No files yet. Upload your first file!
                       </Text>
-                    ) : (
-                      trendingFiles.map((f) => (
-                        <Group key={f._id}>
-                          <ThemeIcon color="blue" size={18} radius="xl">
-                            <IconFile size={13} />
+                    </Box>
+                  ) : (
+                    <Stack gap="sm">
+                      {files.map((file) => (
+                        <Paper
+                          key={file._id}
+                          p="md"
+                          radius="md"
+                          withBorder
+                          style={{
+                            backgroundColor: 'var(--mantine-color-gray-0)',
+                          }}
+                        >
+                          <Stack gap="sm">
+                            <Group
+                              gap="sm"
+                              justify="space-between"
+                              wrap="nowrap"
+                            >
+                              <Group gap="sm" style={{ flex: 1, minWidth: 0 }}>
+                                <ThemeIcon color="blue" size="md" radius="md">
+                                  <IconFile size={18} />
+                                </ThemeIcon>
+                                <Box style={{ flex: 1, minWidth: 0 }}>
+                                  <Text
+                                    size="sm"
+                                    fw={600}
+                                    style={{
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      whiteSpace: 'nowrap',
+                                    }}
+                                  >
+                                    {file.fileName}
+                                  </Text>
+                                  <Text size="xs" c="dimmed">
+                                    {formatFileSize(file.fileSize)} •{' '}
+                                    {new Date(
+                                      file.uploadedAt,
+                                    ).toLocaleDateString()}
+                                  </Text>
+                                </Box>
+                              </Group>
+                              {file.duckdbProcessed && (
+                                <Badge
+                                  size="sm"
+                                  leftSection={<IconDatabase size={12} />}
+                                  color="green"
+                                  variant="light"
+                                >
+                                  {file.duckdbTableName}
+                                </Badge>
+                              )}
+                            </Group>
+                            <Group gap="xs">
+                              {file.duckdbProcessed && (
+                                <Button
+                                  size="xs"
+                                  variant="light"
+                                  component="a"
+                                  href={`/table/${encodeURIComponent(file.duckdbTableName!)}`}
+                                  leftSection={<IconDatabase size={14} />}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  View Table
+                                </Button>
+                              )}
+                              <CopyButton value={file.fileName}>
+                                {({ copied, copy }) => (
+                                  <Tooltip
+                                    label={copied ? 'Copied!' : 'Copy filename'}
+                                    withArrow
+                                  >
+                                    <ActionIcon
+                                      color={copied ? 'green' : 'gray'}
+                                      variant="subtle"
+                                      onClick={copy}
+                                    >
+                                      <IconCopy size={16} />
+                                    </ActionIcon>
+                                  </Tooltip>
+                                )}
+                              </CopyButton>
+                              <Tooltip label="Delete file" withArrow>
+                                <ActionIcon
+                                  color="red"
+                                  variant="subtle"
+                                  onClick={() =>
+                                    void deleteFile({ fileId: file._id })
+                                  }
+                                >
+                                  <IconTrash size={16} />
+                                </ActionIcon>
+                              </Tooltip>
+                            </Group>
+                          </Stack>
+                        </Paper>
+                      ))}
+                    </Stack>
+                  )}
+                </Card>
+
+                {/* Trending Files */}
+                {trendingFiles.length > 0 && (
+                  <Card
+                    withBorder
+                    shadow="sm"
+                    radius="md"
+                    p="lg"
+                    style={{
+                      width: rem(300),
+                      flexShrink: 0,
+                      backgroundColor: 'white',
+                    }}
+                  >
+                    <Group justify="space-between" mb="md">
+                      <Text fw={700} size="md">
+                        Recent Tables
+                      </Text>
+                      <ThemeIcon
+                        color="teal"
+                        size="sm"
+                        radius="md"
+                        variant="light"
+                      >
+                        <IconStar size={14} />
+                      </ThemeIcon>
+                    </Group>
+                    <Divider mb="md" />
+                    <Stack gap="xs">
+                      {trendingFiles.map((f) => (
+                        <Group key={f._id} gap="sm" wrap="nowrap">
+                          <ThemeIcon
+                            color="blue"
+                            size="sm"
+                            radius="md"
+                            variant="light"
+                          >
+                            <IconFile size={12} />
                           </ThemeIcon>
                           <Text
                             size="sm"
                             style={{
                               flex: 1,
-                              textOverflow: 'ellipsis',
                               overflow: 'hidden',
+                              textOverflow: 'ellipsis',
                               whiteSpace: 'nowrap',
                             }}
                           >
                             {f.fileName}
                           </Text>
-                          {f.duckdbProcessed ? (
-                            <Badge color="green" size="xs">
-                              Table
-                            </Badge>
-                          ) : (
-                            <Badge color="yellow" size="xs">
-                              Processing
-                            </Badge>
-                          )}
+                          <Badge color="green" size="xs" variant="light">
+                            Table
+                          </Badge>
                         </Group>
-                      ))
-                    )}
-                  </Stack>
-                </Card>
-                {/* Recent users */}
-                <Card
-                  withBorder
-                  radius="md"
-                  shadow="xs"
-                  p="md"
-                  style={{ background: 'white' }}
-                >
-                  <Group justify="space-between" mb={4}>
-                    <Text fw={700} size="md">
-                      Recent Collaborators
-                    </Text>
-                  </Group>
-                  <Group>
-                    {[...Array(4)].map((_, idx) => (
-                      <Avatar
-                        key={idx}
-                        src={getRandomAvatar()}
-                        radius="xl"
-                        size="md"
-                        style={{ border: '2px solid #B2B2B2' }}
-                      />
-                    ))}
-                  </Group>
-                </Card>
-                {/* Calendar / fake */}
-                <Card
-                  withBorder
-                  radius="md"
-                  shadow="xs"
-                  p="sm"
-                  style={{ background: 'white' }}
-                >
-                  <Group gap={7}>
-                    <IconClock size={18} color="#1971c2" />
-                    <Text fw={600} size="sm">
-                      Next Data Import
-                    </Text>
-                  </Group>
-                  <Divider my={3} />
-                  <Group gap={6}>
-                    <Text c="dimmed" size="xs">
-                      Scheduled for:
-                    </Text>
-                    <Badge color="gray" size="sm">
-                      Monday, 10am
-                    </Badge>
-                  </Group>
-                  <Button variant="light" size="xs" mt={6}>
-                    View Schedule
-                  </Button>
-                </Card>
-              </Stack>
-            </Group>
-          </Stack>
+                      ))}
+                    </Stack>
+                  </Card>
+                )}
+              </Group>
+            </Stack>
+          </Box>
         </Box>
-      </Box>
+      </Container>
 
       <Modal
         opened={uploadModalOpened}

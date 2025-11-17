@@ -9,6 +9,8 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as FeaturesRouteImport } from './routes/features'
+import { Route as AboutRouteImport } from './routes/about'
 import { Route as AuthedRouteRouteImport } from './routes/_authed/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthedDashboardRouteImport } from './routes/_authed/dashboard'
@@ -17,6 +19,16 @@ import { Route as ApiDuckdbQueryRouteImport } from './routes/api/duckdb/query'
 import { Route as ApiAutumnSplatRouteImport } from './routes/api/autumn/$'
 import { Route as AuthedTableTableRouteImport } from './routes/_authed/table.$table'
 
+const FeaturesRoute = FeaturesRouteImport.update({
+  id: '/features',
+  path: '/features',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AboutRoute = AboutRouteImport.update({
+  id: '/about',
+  path: '/about',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthedRouteRoute = AuthedRouteRouteImport.update({
   id: '/_authed',
   getParentRoute: () => rootRouteImport,
@@ -54,6 +66,8 @@ const AuthedTableTableRoute = AuthedTableTableRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
+  '/features': typeof FeaturesRoute
   '/api/autumn': typeof ApiAutumnRouteRouteWithChildren
   '/dashboard': typeof AuthedDashboardRoute
   '/table/$table': typeof AuthedTableTableRoute
@@ -62,6 +76,8 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
+  '/features': typeof FeaturesRoute
   '/api/autumn': typeof ApiAutumnRouteRouteWithChildren
   '/dashboard': typeof AuthedDashboardRoute
   '/table/$table': typeof AuthedTableTableRoute
@@ -72,6 +88,8 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authed': typeof AuthedRouteRouteWithChildren
+  '/about': typeof AboutRoute
+  '/features': typeof FeaturesRoute
   '/api/autumn': typeof ApiAutumnRouteRouteWithChildren
   '/_authed/dashboard': typeof AuthedDashboardRoute
   '/_authed/table/$table': typeof AuthedTableTableRoute
@@ -82,6 +100,8 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/about'
+    | '/features'
     | '/api/autumn'
     | '/dashboard'
     | '/table/$table'
@@ -90,6 +110,8 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/about'
+    | '/features'
     | '/api/autumn'
     | '/dashboard'
     | '/table/$table'
@@ -99,6 +121,8 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/_authed'
+    | '/about'
+    | '/features'
     | '/api/autumn'
     | '/_authed/dashboard'
     | '/_authed/table/$table'
@@ -109,12 +133,28 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthedRouteRoute: typeof AuthedRouteRouteWithChildren
+  AboutRoute: typeof AboutRoute
+  FeaturesRoute: typeof FeaturesRoute
   ApiAutumnRouteRoute: typeof ApiAutumnRouteRouteWithChildren
   ApiDuckdbQueryRoute: typeof ApiDuckdbQueryRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/features': {
+      id: '/features'
+      path: '/features'
+      fullPath: '/features'
+      preLoaderRoute: typeof FeaturesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/about': {
+      id: '/about'
+      path: '/about'
+      fullPath: '/about'
+      preLoaderRoute: typeof AboutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authed': {
       id: '/_authed'
       path: ''
@@ -196,6 +236,8 @@ const ApiAutumnRouteRouteWithChildren = ApiAutumnRouteRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthedRouteRoute: AuthedRouteRouteWithChildren,
+  AboutRoute: AboutRoute,
+  FeaturesRoute: FeaturesRoute,
   ApiAutumnRouteRoute: ApiAutumnRouteRouteWithChildren,
   ApiDuckdbQueryRoute: ApiDuckdbQueryRoute,
 }

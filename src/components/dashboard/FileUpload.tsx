@@ -1,11 +1,23 @@
 import { Dropzone, MIME_TYPES } from '@mantine/dropzone'
-import { Group, Text, rem, Stack, Card, Box, Progress } from '@mantine/core'
-import { IconUpload, IconX } from '@tabler/icons-react'
+import {
+  Group,
+  Text,
+  rem,
+  Stack,
+  Card,
+  Box,
+  Progress,
+  Tabs,
+  TextInput,
+  Textarea,
+  Button,
+} from '@mantine/core'
+import { IconUpload, IconX, IconLink } from '@tabler/icons-react'
 import { useState } from 'react'
 import { api } from '@/convex/_generated/api'
 import { notifications } from '@mantine/notifications'
-import { useMutation } from 'convex/react'
-import { createTableFromCSV } from '@/src/utils/duckdb'
+import { useMutation, useAction } from 'convex/react'
+import { createTableFromJSON, createTableFromCSV } from '@/src/utils/duckdb'
 import { ConvexClient } from 'convex/browser'
 
 interface FileUploadProps {
@@ -15,6 +27,9 @@ interface FileUploadProps {
 export default function FileUpload({ onUploadComplete }: FileUploadProps) {
   const [uploading, setUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
+  const [activeTab, setActiveTab] = useState<string | null>('file')
+  const [url, setUrl] = useState('')
+  const [prompt, setPrompt] = useState('')
 
   // Mutation to generate upload URL
   const generateUploadUrl = useMutation(api.csv.generateUploadUrl)
@@ -24,6 +39,96 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
 
   // Mutation to update DuckDB info
   const updateDuckDBInfo = useMutation(api.csv.updateDuckDBInfo)
+
+  // Action to create table from URL
+  const createTableFromURL = useAction(api.csv.createTableFromURL)
+
+  const handleURLSubmit = async () => {
+    if (!url.trim()) {
+      notifications.show({
+        title: 'Invalid URL',
+        message: 'Please enter a valid URL',
+        color: 'red',
+      })
+      return
+    }
+
+    if (!prompt.trim()) {
+      notifications.show({
+        title: 'Prompt Required',
+        message: 'Please enter a prompt describing what data to extract',
+        color: 'red',
+      })
+      return
+    }
+
+    setUploading(true)
+    setUploadProgress(0)
+
+    try {
+      setUploadProgress(20)
+
+      // Call the action to extract data and create CSV
+      const result = await createTableFromURL({
+        url: url.trim(),
+        prompt: prompt.trim(),
+      })
+
+      setUploadProgress(60)
+
+      if (!result.success || !result.data) {
+        throw new Error('Failed to extract data from URL')
+      }
+
+      // Create DuckDB table directly from JSON data
+      const tableResult = await createTableFromJSON({
+        data: {
+          data: result.data,
+          tableName: result.tableName,
+        },
+      })
+
+      setUploadProgress(90)
+
+      // Update file record with DuckDB table name
+      await updateDuckDBInfo({
+        fileId: result.fileId,
+        tableName: tableResult.tableName,
+      })
+
+      console.log(
+        `DuckDB table created: ${tableResult.tableName} with ${tableResult.rowCount} rows`,
+      )
+
+      notifications.show({
+        title: 'Table Created',
+        message: `Created DuckDB table "${tableResult.tableName}" with ${tableResult.rowCount} rows from URL`,
+        color: 'green',
+      })
+
+      setUploadProgress(100)
+
+      // Reset form
+      setUrl('')
+      setPrompt('')
+
+      // Call the callback if provided
+      onUploadComplete?.()
+    } catch (error) {
+      console.error('URL extraction error:', error)
+      notifications.show({
+        title: 'Extraction Failed',
+        message:
+          error instanceof Error
+            ? error.message
+            : 'Failed to extract data from URL',
+        color: 'red',
+      })
+    } finally {
+      setUploading(false)
+      setUploadProgress(0)
+    }
+  }
 
   const handleDrop = async (acceptedFiles: File[]) => {
     setUploading(true)
@@ -140,77 +245,133 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
 
   return (
     <Stack gap="lg">
-      <Card shadow="sm" padding="lg" radius="md" withBorder>
-        <Dropzone
-          onDrop={handleDrop}
-          onReject={() => {
-            notifications.show({
-              title: 'Invalid File',
-              message: 'Please upload valid files',
-              color: 'red',
-            })
-          }}
-          maxSize={10 * 1024 ** 2} // 10MB
-          accept={[MIME_TYPES.csv, MIME_TYPES.xlsx, MIME_TYPES.xls]}
-          loading={uploading}
-        >
-          <Group
-            justify="center"
-            gap="xl"
-            mih={220}
-            style={{ pointerEvents: 'none' }}
-          >
-            <Dropzone.Accept>
-              <IconUpload
-                style={{
-                  width: rem(52),
-                  height: rem(52),
-                  color: 'var(--mantine-color-blue-6)',
-                }}
-                stroke={1.5}
-              />
-            </Dropzone.Accept>
-            <Dropzone.Reject>
-              <IconX
-                style={{
-                  width: rem(52),
-                  height: rem(52),
-                  color: 'var(--mantine-color-red-6)',
-                }}
-                stroke={1.5}
-              />
-            </Dropzone.Reject>
-            <Dropzone.Idle>
-              <IconUpload
-                style={{
-                  width: rem(52),
-                  height: rem(52),
-                  color: 'var(--mantine-color-dimmed)',
-                }}
-                stroke={1.5}
-              />
-            </Dropzone.Idle>
+      <Tabs value={activeTab} onChange={setActiveTab}>
+        <Tabs.List>
+          <Tabs.Tab value="file" leftSection={<IconUpload size={16} />}>
+            Upload File
+          </Tabs.Tab>
+          <Tabs.Tab value="url" leftSection={<IconLink size={16} />}>
+            From URL
+          </Tabs.Tab>
+        </Tabs.List>
 
-            <div>
-              <Text size="xl" inline>
-                {'Drag files here or click to select'}
-              </Text>
-              <Text size="sm" c="dimmed" inline mt={7}>
-                Attach CSV, XLSX, or XLS files (max 10MB each)
-              </Text>
-            </div>
-          </Group>
-        </Dropzone>
+        <Tabs.Panel value="file" pt="md">
+          <Card shadow="sm" padding="lg" radius="md" withBorder>
+            <Dropzone
+              onDrop={handleDrop}
+              onReject={() => {
+                notifications.show({
+                  title: 'Invalid File',
+                  message: 'Please upload valid files',
+                  color: 'red',
+                })
+              }}
+              maxSize={10 * 1024 ** 2} // 10MB
+              accept={[MIME_TYPES.csv, MIME_TYPES.xlsx, MIME_TYPES.xls]}
+              loading={uploading}
+            >
+              <Group
+                justify="center"
+                gap="xl"
+                mih={220}
+                style={{ pointerEvents: 'none' }}
+              >
+                <Dropzone.Accept>
+                  <IconUpload
+                    style={{
+                      width: 24,
+                      height: 24,
+                      color: 'var(--mantine-color-blue-6)',
+                    }}
+                    stroke={1.5}
+                  />
+                </Dropzone.Accept>
+                <Dropzone.Reject>
+                  <IconX
+                    style={{
+                      width: 24,
+                      height: 24,
+                      color: 'var(--mantine-color-red-6)',
+                    }}
+                    stroke={1.5}
+                  />
+                </Dropzone.Reject>
+                <Dropzone.Idle>
+                  <IconUpload
+                    style={{
+                      width: 24,
+                      height: 24,
+                      color: 'var(--mantine-color-dimmed)',
+                    }}
+                    stroke={1.5}
+                  />
+                </Dropzone.Idle>
 
-        {uploading && (
-          <Box mt="md">
-            <Text size="sm" mb="xs">
-              Uploading... {uploadProgress}%
-            </Text>
-            <Progress value={uploadProgress} animated />
-          </Box>
-        )}
-      </Card>
+                <div>
+                  <Text size="xl" inline>
+                    {'Drag files here or click to select'}
+                  </Text>
+                  <Text size="sm" c="dimmed" inline mt={7}>
+                    Attach CSV, XLSX, or XLS files (max 10MB each)
+                  </Text>
+                </div>
+              </Group>
+            </Dropzone>
+
+            {uploading && (
+              <Box mt="md">
+                <Text size="sm" mb="xs">
+                  Uploading... {uploadProgress}%
+                </Text>
+                <Progress value={uploadProgress} animated />
+              </Box>
+            )}
+          </Card>
+        </Tabs.Panel>
+
+        <Tabs.Panel value="url" pt="md">
+          <Card shadow="sm" padding="lg" radius="md" withBorder>
+            <Stack gap="md">
+              <TextInput
+                label="URL"
+                placeholder="https://example.com/page"
+                value={url}
+                onChange={(e) => setUrl(e.currentTarget.value)}
+                disabled={uploading}
+                required
+                description="Enter the URL of the webpage to extract data from"
+              />
+              <Textarea
+                label="Extraction Prompt"
+                placeholder="Extract all product information including name, price, and description..."
+                value={prompt}
+                onChange={(e) => setPrompt(e.currentTarget.value)}
+                disabled={uploading}
+                required
+                minRows={3}
+                description="Describe what data you want to extract from the webpage. Firecrawl will use this prompt to extract structured data."
+              />
+              <Button
+                onClick={handleURLSubmit}
+                loading={uploading}
+                leftSection={<IconLink size={18} />}
+                fullWidth
+              >
+                Extract Data & Create Table
+              </Button>
+
+              {uploading && (
+                <Box mt="md">
+                  <Text size="sm" mb="xs">
+                    Extracting data... {uploadProgress}%
+                  </Text>
+                  <Progress value={uploadProgress} animated />
+                </Box>
+              )}
+            </Stack>
+          </Card>
+        </Tabs.Panel>
+      </Tabs>
     </Stack>
   )
 }

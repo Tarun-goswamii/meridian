@@ -13,8 +13,6 @@ import { Text, Group, Box, Divider, Tabs, ScrollArea } from '@mantine/core'
 import { QueryEditor } from '~/components/QueryEditor'
 import type { Insight } from '~/components/InsightsPanel'
 import { useDidUpdate } from '@mantine/hooks'
-import usePresence from '@convex-dev/presence/react'
-import FacePile from '@convex-dev/presence/facepile'
 import { analyzeTableWithDuckDB } from '~/utils/duckdbAnalytics'
 import { PaginationControls } from '~/components/PaginationControls'
 import { TableHeader } from '~/components/TableHeader'
@@ -104,14 +102,6 @@ function RouteComponent() {
     'table',
   )
   const user = useSuspenseQuery(convexQuery(api.authFns.currentUser, {}))
-
-  // Use table-specific room ID for presence
-  const roomId = `table:${table}`
-  const presenceState = usePresence(
-    api.presence,
-    roomId,
-    user?.data?.userId ?? 'User ' + Math.floor(Math.random() * 10000),
-  )
 
   const askGemini = useAction(api.table_agent.askGemini)
   const generateInsights = useAction(api.insights.generateInsights)
@@ -846,14 +836,12 @@ function RouteComponent() {
           }}
         >
           <Box
-            p="xl"
             style={{
               height: '100%',
               borderRadius: '2px',
               overflow: 'hidden',
             }}
           >
-            <FacePile presenceState={presenceState ?? []} />
             <TableHeader
               tableName={table}
               columnCount={data.columns.length}
@@ -862,7 +850,7 @@ function RouteComponent() {
               columnVisibility={columnVisibility}
               onVisibilityChange={setColumnVisibility}
             />
-            <Divider mb="xl" style={{ borderColor: 'rgba(0, 0, 0, 0.06)' }} />
+            <div style={{ padding: '5px' }}></div>
 
             <Tabs
               value={activeTab}

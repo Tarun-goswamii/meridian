@@ -3,6 +3,7 @@ import {
   Outlet,
   Scripts,
   createRootRouteWithContext,
+  useLocation,
 } from '@tanstack/react-router'
 import * as React from 'react'
 import type { QueryClient } from '@tanstack/react-query'
@@ -10,6 +11,8 @@ import { MantineProvider } from '@mantine/core'
 import { Notifications } from '@mantine/notifications'
 import { AutumnProvider } from 'autumn-js/react'
 import PRESENCE_CSS from '@convex-dev/presence/facepile.css?url'
+import { Navbar } from '@/src/components/Navbar'
+import { Footer } from '@/src/components/Footer'
 import '@mantine/core/styles.css'
 import '@mantine/notifications/styles.css'
 import '@mantine/dropzone/styles.css'
@@ -27,7 +30,7 @@ export const Route = createRootRouteWithContext<{
         content: 'width=device-width, initial-scale=1',
       },
       {
-        title: 'TanStack Start Starter',
+        title: 'Meridian - Collaborative Data Science Platform',
       },
     ],
     links: [
@@ -59,9 +62,16 @@ export const Route = createRootRouteWithContext<{
 })
 
 function RootComponent() {
+  const location = useLocation()
+  const isAuthedRoute =
+    location.pathname.startsWith('/dashboard') ||
+    location.pathname.startsWith('/table/')
+
   return (
     <RootDocument>
+      {!isAuthedRoute ? <Navbar /> : <Navbar authed={true} />}
       <Outlet />
+      {!isAuthedRoute && <Footer />}
     </RootDocument>
   )
 }
