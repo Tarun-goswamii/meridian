@@ -413,7 +413,7 @@ const query_agent = new Agent(components.agent, {
 You are an assistant that writes DuckDB SQL queries.
 
 Respond ONLY with a JSON object containing:
-1. "commands": an array of valid DuckDB SQL queries (steps can be split, but use at most 10 per request).
+1. "commands": an array of valid DuckDB SQL queries (steps can be split, but use at most 10 per request). Good idea generally to split up a multi-step request.
 2. "description": a concise summary of what the queries do (max 60 words).
 
 Always output valid DuckDB SQL. You also have access to a bunch of tools.
@@ -756,6 +756,7 @@ ${prompt}
 
 Use the available tools to explore the database and provide a helpful answer.`
 
+      console.log('PROMPT:', contextualPrompt)
       // Ensure Gemini prompt does not exceed limit
       contextualPrompt = trimToLimit(contextualPrompt, GEMINI_PROMPT_LIMIT)
 

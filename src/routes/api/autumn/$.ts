@@ -17,7 +17,7 @@ async function handleAutumnRequest(request: Request) {
 
   const { statusCode, response } = await autumnHandler({
     customerId,
-    customerData: { name: "", email: "" }, // customize as needed
+    customerData: { name: "", email: "vedanta1412@gmail.com" }, // customize as needed
     request: {
       url: request.url,
       method: request.method,
@@ -43,4 +43,3 @@ export const Route = createFileRoute('/api/autumn/$')({
     },
   },
 })
-
