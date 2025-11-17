@@ -672,43 +672,90 @@ Please write a DuckDB SQL queries for the table "${tableName}" based on the user
           },
         )
 
-        // Only take the first valid partialObject, or the last one if multiple
+        // Process partial objects during streaming for real-time updates
         for await (const partialObject of objstream.partialObjectStream) {
-          if (
-            Array.isArray(partialObject.commands) &&
-            typeof partialObject.description === 'string'
-          ) {
-            finalObject = {
-              commands: partialObject.commands.filter(
-                (cmd): cmd is string => typeof cmd === 'string',
-              ),
-              description: partialObject.description,
+          // Update finalObject if we have valid data (even if incomplete)
+          if (partialObject) {
+            if (
+              Array.isArray(partialObject.commands) &&
+              partialObject.commands.length > 0
+            ) {
+              finalObject.commands = partialObject.commands.filter(
+                (cmd): cmd is string =>
+                  typeof cmd === 'string' && cmd.trim().length > 0,
+              )
+            }
+            if (
+              typeof partialObject.description === 'string' &&
+              partialObject.description.trim().length > 0
+            ) {
+              finalObject.description = partialObject.description
             }
 
-            await ctx.runMutation(agentUtilsApi.updateAgentMessageRecord, {
-              threadId: threadDoc._id,
-              messageId: message_id,
-              agentName,
-              mode,
-              content: partialObject.description,
-              description: partialObject.description,
-              commands: Array.isArray(partialObject.commands)
-                ? partialObject.commands.filter(
-                    (cmd: any): cmd is string => typeof cmd === 'string',
-                  )
-                : [],
-            })
+            // Update message with current state during streaming
+            if (finalObject.commands.length > 0 || finalObject.description) {
+              await ctx.runMutation(agentUtilsApi.updateAgentMessageRecord, {
+                threadId: threadDoc._id,
+                messageId: message_id,
+                agentName,
+                mode,
+                content: finalObject.description || '',
+                description: finalObject.description || '',
+                commands: finalObject.commands,
+              })
+            }
           }
         }
 
-        // If no valid result, throw
+        // After stream completes, check for finalObject property
+        const streamFinalObject = (objstream as any).finalObject
+        if (streamFinalObject) {
+          if (
+            Array.isArray(streamFinalObject.commands) &&
+            streamFinalObject.commands.length > 0
+          ) {
+            finalObject.commands = streamFinalObject.commands.filter(
+              (cmd: any): cmd is string =>
+                typeof cmd === 'string' && cmd.trim().length > 0,
+            )
+          }
+          if (
+            typeof streamFinalObject.description === 'string' &&
+            streamFinalObject.description.trim().length > 0
+          ) {
+            finalObject.description = streamFinalObject.description
+          }
+        }
+
+        // Validate final result
         if (
           !finalObject.commands.length ||
           !finalObject.description ||
-          typeof finalObject.description !== 'string'
+          typeof finalObject.description !== 'string' ||
+          finalObject.description.trim().length === 0
         ) {
-          throw new Error('Invalid response format from agent')
+          const errorDetails = {
+            hasCommands: finalObject.commands.length > 0,
+            commandsCount: finalObject.commands.length,
+            hasDescription: !!finalObject.description,
+            descriptionType: typeof finalObject.description,
+            descriptionLength: finalObject.description?.length || 0,
+          }
+          throw new Error(
+            `Invalid response format from agent: ${JSON.stringify(errorDetails)}`,
+          )
         }
+
+        // Update message record with final validated object
+        await ctx.runMutation(agentUtilsApi.updateAgentMessageRecord, {
+          threadId: threadDoc._id,
+          messageId: message_id,
+          agentName,
+          mode,
+          content: finalObject.description,
+          description: finalObject.description,
+          commands: finalObject.commands,
+        })
 
         const assistantCreatedAt = Date.now()
         const assistantSummary = summarizeText(finalObject.description)
