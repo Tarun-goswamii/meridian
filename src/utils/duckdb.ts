@@ -15,7 +15,7 @@ let duckDBInstance: DuckDBInstance | null = null
 export const getDuckDB = createServerOnlyFn(async () => {
   if (!duckDBInstance) {
     duckDBInstance = await DuckDBInstance.create(
-      `md:?token=${process.env.MD_ACCESS_TOKEN}`,
+      `md:my_db?token=${process.env.MD_ACCESS_TOKEN}`,
     )
   }
   return duckDBInstance
