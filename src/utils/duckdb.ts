@@ -16,9 +16,8 @@ export const getDuckDB = createServerOnlyFn(async () => {
   if (!duckDBInstance) {
     duckDBInstance = await DuckDBInstance.create(
       `md:?token=${process.env.MD_ACCESS_TOKEN}`,
+      { home_directory: '/tmp' },
     )
-    const connection = await duckDBInstance.connect()
-    await connection.run("SET home_directory='/tmp/duckdb'")
   }
   return duckDBInstance
 })
