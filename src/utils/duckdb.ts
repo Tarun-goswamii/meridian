@@ -2,7 +2,7 @@
 // certain paths as external to the bundler @duckdb/node-bindings-darwin-x64/duckdb.node
 // which I don't understand. This is running entirely on the server, it should NOT
 // be happening. However, if you do run into this, just start the server without this
-// import and then import it and call a route that uses it. Everything will work fine.
+// import and then import it and call a route that uses it. Everything will be fine, don't kill yrslf.
 import { DuckDBInstance } from '@duckdb/node-api'
 import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
 import { writeFileSync, unlinkSync, mkdtempSync } from 'fs'
@@ -14,7 +14,7 @@ let duckDBInstance: DuckDBInstance | null = null
 
 export const getDuckDB = createServerOnlyFn(async () => {
   if (!duckDBInstance) {
-    duckDBInstance = await DuckDBInstance.create('myduck.db')
+    duckDBInstance = await DuckDBInstance.create(':memory:')
   }
   return duckDBInstance
 })
@@ -224,7 +224,7 @@ function determineColumnType(values: any[]): string {
 
   // Check if all values are of the same type
   const types = new Set(nonNullValues.map((v) => typeof v))
-  
+
   // If mixed types, default to VARCHAR
   if (types.size > 1) {
     return 'VARCHAR'
@@ -354,9 +354,7 @@ function flattenJSONData(data: any[]): any[] {
 
 // Create DuckDB table directly from JSON data
 export const createTableFromJSON = createServerFn()
-  .inputValidator(
-    (input: { data: any[]; tableName: string }) => input,
-  )
+  .inputValidator((input: { data: any[]; tableName: string }) => input)
   .handler(async ({ data }) => {
     const { data: jsonData, tableName } = data
 
@@ -394,7 +392,11 @@ export const createTableFromJSON = createServerFn()
       // Determine column types by analyzing all values
       // Map original column names to sanitized names
       const columnMap = new Map<string, string>()
-      const columnDefs: Array<{ name: string; type: string; originalName: string }> = []
+      const columnDefs: Array<{
+        name: string
+        type: string
+        originalName: string
+      }> = []
       columns.forEach((colName) => {
         const sanitized = sanitizeColumnName(colName)
         columnMap.set(colName, sanitized)
