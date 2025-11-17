@@ -12,3 +12,8 @@
 9. Perhaps try to make it git-like?
 10. Tables auto-connect
 11. Download your DB
+
+12. DB Host karle kahi
+13. Cloudflare daalna padega
+14. Firecrawl dekhliyo aaram se
+15. Autumn bhi dekhliyo

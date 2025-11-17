@@ -416,11 +416,11 @@ function RouteComponent() {
           viewport={{ once: true }}
         >
           <Paper
-            shadow="lg"
+            shadow="none"
             p={{ base: rem(40), md: rem(60) }}
             radius="lg"
             style={{
-              border: '1px solid var(--mantine-color-gray-2)',
+              // border: '1px solid var(--mantine-color-gray-2)',
               textAlign: 'center',
             }}
           >
