@@ -12,9 +12,12 @@ import { join } from 'path'
 let duckDBInstance: DuckDBInstance | null = null
 // let duckDBInstance: null = null
 
+const DB_DIR = '/tmp'
+const DB_PATH = join(DB_DIR, 'myduck.db')
+
 export const getDuckDB = createServerOnlyFn(async () => {
   if (!duckDBInstance) {
-    duckDBInstance = await DuckDBInstance.create('/tmp/myduck.db')
+    duckDBInstance = await DuckDBInstance.create(DB_PATH)
   }
   return duckDBInstance
 })
