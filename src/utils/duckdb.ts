@@ -30,7 +30,7 @@ export const getDuckDB = createServerOnlyFn(async () => {
     mkdirSync(home, { recursive: true });
 
     duckDBInstance = await DuckDBInstance.create(
-      `md:my_db?token=${process.env.MD_ACCESS_TOKEN}&home_directory=${home}`
+      `md:my_db?token=${process.env.MD_ACCESS_TOKEN}&home_directory=%2Ftmp%2Fduck`
     );
   }
   return duckDBInstance;
