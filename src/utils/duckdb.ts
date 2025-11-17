@@ -5,144 +5,26 @@
 // import and then import it and call a route that uses it. Everything will be fine, don't kill yrslf.
 import { DuckDBInstance } from '@duckdb/node-api'
 import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
-import {
-  writeFileSync,
-  unlinkSync,
-  mkdtempSync,
-  existsSync,
-  readFileSync,
-  mkdirSync,
-} from 'fs'
+import { writeFileSync, unlinkSync, mkdtempSync } from 'fs'
 import { tmpdir } from 'os'
-import { join, dirname } from 'path'
-import {
-  GetObjectCommand,
-  PutObjectCommand,
-  S3Client,
-} from '@aws-sdk/client-s3'
-import { Readable } from 'stream'
+import { join } from 'path'
 
 let duckDBInstance: DuckDBInstance | null = null
 
-const R2_BUCKET = process.env.R2_BUCKET
-const R2_ENDPOINT = process.env.R2_ENDPOINT
-const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID
-const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY
-const R2_DUCKDB_KEY = process.env.R2_DUCKDB_KEY ?? 'duckdb/myduck.db'
+process.env.HOME = '/tmp'
 
-const LOCAL_DB_DIR =
-  process.env.LOCAL_DUCKDB_DIR ?? join(tmpdir(), 'insite-duckdb')
-const LOCAL_DB_PATH = join(LOCAL_DB_DIR, 'myduck.db')
-
-const R2_ENABLED =
-  Boolean(R2_BUCKET) &&
-  Boolean(R2_ENDPOINT) &&
-  Boolean(R2_ACCESS_KEY_ID) &&
-  Boolean(R2_SECRET_ACCESS_KEY)
-
-const r2Client = R2_ENABLED
-  ? new S3Client({
-      region: 'auto',
-      endpoint: R2_ENDPOINT,
-      credentials: {
-        accessKeyId: R2_ACCESS_KEY_ID as string,
-        secretAccessKey: R2_SECRET_ACCESS_KEY as string,
-      },
-    })
-  : null
-
-let dbPrepared: Promise<void> | null = null
-
-async function streamToBuffer(stream: Readable): Promise<Buffer> {
-  const chunks: Buffer[] = []
-  for await (const chunk of stream) {
-    chunks.push(
-      typeof chunk === 'string' ? Buffer.from(chunk) : Buffer.from(chunk),
-    )
-  }
-  return Buffer.concat(chunks)
-}
-
-async function downloadDbFromR2() {
-  if (!r2Client || !R2_BUCKET) {
-    return
-  }
-  try {
-    const response = await r2Client.send(
-      new GetObjectCommand({
-        Bucket: R2_BUCKET,
-        Key: R2_DUCKDB_KEY,
-      }),
-    )
-    if (response.Body) {
-      const body =
-        response.Body instanceof Readable
-          ? await streamToBuffer(response.Body)
-          : Buffer.from(await response.Body.transformToByteArray())
-      mkdirSync(dirname(LOCAL_DB_PATH), { recursive: true })
-      writeFileSync(LOCAL_DB_PATH, body)
-    }
-  } catch (error: any) {
-    if (
-      error?.$metadata?.httpStatusCode === 404 ||
-      error?.name === 'NoSuchKey'
-    ) {
-      mkdirSync(dirname(LOCAL_DB_PATH), { recursive: true })
-      // File will be created by DuckDB when opened; nothing to download yet.
-      return
-    }
-    throw error
-  }
-}
-
-async function uploadDbToR2() {
-  if (!r2Client || !R2_BUCKET || !existsSync(LOCAL_DB_PATH)) {
-    return
-  }
-  const body = readFileSync(LOCAL_DB_PATH)
-  await r2Client.send(
-    new PutObjectCommand({
-      Bucket: R2_BUCKET,
-      Key: R2_DUCKDB_KEY,
-      Body: body,
-      ContentType: 'application/octet-stream',
-    }),
-  )
-}
-
-async function prepareLocalDbFile() {
-  if (existsSync(LOCAL_DB_PATH)) {
-    return
-  }
-  mkdirSync(dirname(LOCAL_DB_PATH), { recursive: true })
-  if (R2_ENABLED) {
-    await downloadDbFromR2()
-  }
-}
-
-async function ensureDbReady() {
-  if (!dbPrepared) {
-    dbPrepared = prepareLocalDbFile()
-  }
-  await dbPrepared
-}
-
-async function checkpointAndSync(
-  connection: Awaited<ReturnType<DuckDBInstance['connect']>>,
-) {
-  try {
-    await connection.run('CHECKPOINT')
-  } catch (error) {
-    console.warn('Failed to checkpoint DuckDB before syncing to R2', error)
-  } finally {
-    await uploadDbToR2()
-  }
-}
+const MOTHERDUCK_TOKEN = process.env.MD_ACCESS_TOKEN
 
 export const getDuckDB = createServerOnlyFn(async () => {
-  await ensureDbReady()
+  process.env.HOME = '/tmp'
+  if (!MOTHERDUCK_TOKEN) {
+    throw new Error('MD_ACCESS_TOKEN environment variable is required')
+  }
   if (!duckDBInstance) {
-    duckDBInstance = await DuckDBInstance.create(LOCAL_DB_PATH)
+    const encodedToken = encodeURIComponent(MOTHERDUCK_TOKEN)
+    duckDBInstance = await DuckDBInstance.create(
+      `md:my_db?token=${encodedToken}`,
+    )
   }
   return duckDBInstance
 })
@@ -239,7 +121,6 @@ export const createTableFromCSV = createServerFn()
       `)
       const rows = await result.getRows()
 
-      await checkpointAndSync(connection)
       connection.closeSync()
 
       // Extract row count from the result
@@ -571,7 +452,6 @@ export const createTableFromJSON = createServerFn()
       )
       const rows = await result.getRows()
 
-      await checkpointAndSync(connection)
       connection.closeSync()
 
       // Extract row count from the result
