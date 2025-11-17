@@ -59,6 +59,31 @@ function summarizeText(text: string, limit = 200) {
   return text.slice(0, limit).trimEnd() + '...'
 }
 
+type TableColumn = {
+  name: string
+  type: string
+}
+
+function sanitizeColumns(columns: TableColumn[] | undefined): TableColumn[] {
+  if (!Array.isArray(columns)) return []
+  return columns.map((col, idx) => {
+    const safeName =
+      typeof col?.name === 'string' && col.name.trim()
+        ? col.name.trim()
+        : `column_${idx + 1}`
+    const safeType =
+      typeof col?.type === 'string' && col.type.trim()
+        ? col.type.trim()
+        : 'unknown'
+    return { name: safeName, type: safeType }
+  })
+}
+
+function describeColumns(columns: TableColumn[]): string {
+  if (!columns.length) return 'No column metadata provided'
+  return columns.map((col) => `${col.name} (${col.type})`).join(', ')
+}
+
 // Action to fetch DuckDB query results
 export const fetchDuckDBQuery = action({
   args: { query: v.string() },
@@ -469,11 +494,13 @@ export const askGemini = action({
   args: {
     prompt: v.string(),
     tableName: v.string(),
-    columns: v.array(
-      v.object({
-        name: v.string(),
-        type: v.string(),
-      }),
+    columns: v.optional(
+      v.array(
+        v.object({
+          name: v.string(),
+          type: v.string(),
+        }),
+      ),
     ),
     sampleRows: v.optional(v.array(v.any())),
     threadId: v.optional(v.string()),
@@ -484,6 +511,7 @@ export const askGemini = action({
     ctx,
     { prompt, tableName, columns, sampleRows, threadId, mode, serverUrl },
   ) => {
+    const safeColumns = sanitizeColumns(columns)
     const user_id = await checkAuth(ctx)
 
     // Update server URL if provided
@@ -578,9 +606,7 @@ export const askGemini = action({
     // Query mode -------------------------------------------------------------------------------------
     if (mode === 'query') {
       // Query mode: generate SQL queries
-      const columnInfo = columns
-        .map((col) => `${col.name} (${col.type})`)
-        .join(', ')
+      const columnInfo = describeColumns(safeColumns)
       const sampleData =
         sampleRows && sampleRows.length > 0
           ? `\n\nSample data (first ${sampleRows.length} rows):\n${JSON.stringify(
@@ -659,23 +685,19 @@ Please write a DuckDB SQL queries for the table "${tableName}" based on the user
               description: partialObject.description,
             }
 
-            await ctx.scheduler.runAfter(
-              0,
-              agentUtilsApi.updateAgentMessageRecord,
-              {
-                threadId: threadDoc._id,
-                messageId: message_id,
-                agentName,
-                mode,
-                content: partialObject.description,
-                description: partialObject.description,
-                commands: Array.isArray(partialObject.commands)
-                  ? partialObject.commands.filter(
-                      (cmd: any): cmd is string => typeof cmd === 'string',
-                    )
-                  : [],
-              },
-            )
+            await ctx.runMutation(agentUtilsApi.updateAgentMessageRecord, {
+              threadId: threadDoc._id,
+              messageId: message_id,
+              agentName,
+              mode,
+              content: partialObject.description,
+              description: partialObject.description,
+              commands: Array.isArray(partialObject.commands)
+                ? partialObject.commands.filter(
+                    (cmd: any): cmd is string => typeof cmd === 'string',
+                  )
+                : [],
+            })
           }
         }
 
@@ -749,7 +771,7 @@ You are analyzing the table "${tableName}".
 
 TABLE CONTEXT:
 - Table Name: ${tableName}
-- Columns: ${columns.map((col) => `${col.name} (${col.type})`).join(', ')}
+- Columns: ${describeColumns(safeColumns)}
 
 USER REQUEST:
 ${prompt}
@@ -801,19 +823,15 @@ Use the available tools to explore the database and provide a helpful answer.`
 
       // Helper function to update message with current tool steps
       const updateMessageWithToolSteps = async () => {
-        await ctx.scheduler.runAfter(
-          0,
-          agentUtilsApi.updateAgentMessageRecord,
-          {
-            threadId: threadDoc._id,
-            messageId: message_id,
-            agentName,
-            mode,
-            content: assistantText,
-            description: summarizeText(assistantText),
-            toolSteps: toolSteps.length > 0 ? toolSteps : undefined,
-          },
-        )
+        await ctx.runMutation(agentUtilsApi.updateAgentMessageRecord, {
+          threadId: threadDoc._id,
+          messageId: message_id,
+          agentName,
+          mode,
+          content: assistantText,
+          description: summarizeText(assistantText),
+          toolSteps: toolSteps.length > 0 ? toolSteps : undefined,
+        })
       }
 
       // Process stream parts
@@ -916,19 +934,15 @@ Use the available tools to explore the database and provide a helpful answer.`
             assistantText += textDelta.text
 
             // Update message with accumulated text
-            await ctx.scheduler.runAfter(
-              0,
-              agentUtilsApi.updateAgentMessageRecord,
-              {
-                threadId: threadDoc._id,
-                messageId: message_id,
-                agentName,
-                mode,
-                content: assistantText,
-                description: summarizeText(assistantText),
-                toolSteps: toolSteps.length > 0 ? toolSteps : undefined,
-              },
-            )
+            await ctx.runMutation(agentUtilsApi.updateAgentMessageRecord, {
+              threadId: threadDoc._id,
+              messageId: message_id,
+              agentName,
+              mode,
+              content: assistantText,
+              description: summarizeText(assistantText),
+              toolSteps: toolSteps.length > 0 ? toolSteps : undefined,
+            })
           }
         }
       }

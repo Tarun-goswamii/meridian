@@ -7,33 +7,33 @@ interface DataTableProps {
 }
 
 export function DataTable({ table, visibleColumnsCount }: DataTableProps) {
+  const minViewportWidth = Math.max(960, visibleColumnsCount * 140)
+  const minTableWidth =
+    visibleColumnsCount < 8 ? undefined : visibleColumnsCount * 140
+
   return (
-    <ScrollArea
+    <ScrollArea.Autosize
       type="auto"
       offsetScrollbars
+      scrollHideDelay={300}
+      scrollbarSize={10}
+      mah="calc(100vh - 220px)"
+      mih={300}
       style={{
-        maxHeight: 'calc(100vh - 265px)',
-        minHeight: 300,
         borderRadius: 4,
         background: 'white',
-        overflow: 'auto',
+        width: '100%',
       }}
-      scrollbarSize={10}
-      scrollHideDelay={300}
-      h="100%"
-      w="100%"
+      viewportProps={{
+        style: {
+          paddingBottom: 4,
+        },
+      }}
     >
-      <ScrollArea
-        type="auto"
-        offsetScrollbars
-        scrollHideDelay={300}
+      <div
         style={{
-          minWidth: Math.max(960, visibleColumnsCount * 160),
-          width: '100%',
-          overflowX: 'auto',
+          minWidth: minViewportWidth,
         }}
-        scrollbarSize={8}
-        h="100%"
       >
         <Table
           striped
@@ -44,8 +44,7 @@ export function DataTable({ table, visibleColumnsCount }: DataTableProps) {
           style={{
             borderCollapse: 'separate',
             tableLayout: 'auto',
-            minWidth:
-              visibleColumnsCount < 8 ? undefined : visibleColumnsCount * 140,
+            minWidth: minTableWidth,
             maxWidth: 2600,
           }}
           styles={{
@@ -124,8 +123,8 @@ export function DataTable({ table, visibleColumnsCount }: DataTableProps) {
             )}
           </tbody>
         </Table>
-      </ScrollArea>
-    </ScrollArea>
+      </div>
+    </ScrollArea.Autosize>
   )
 }
 
