@@ -8,7 +8,7 @@ import { queryDuckDB } from '~/utils/duckdb'
 import { useAction, useMutation, useQuery } from 'convex/react'
 import { api } from '@/convex/_generated/api'
 import { useReactTable, getCoreRowModel } from '@tanstack/react-table'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Text, Group, Box, Tabs, ScrollArea } from '@mantine/core'
 import { QueryEditor } from '~/components/QueryEditor'
 import type { Insight } from '~/components/InsightsPanel'
@@ -112,6 +112,10 @@ function RouteComponent() {
   const threads = useQuery(api.agent_utils.listAgentThreads, {
     tableName: table,
   })
+  const handleRemoteQueryExecuted = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['tables', table] })
+    setPageIndex(0)
+  }, [queryClient, table, setPageIndex])
   const hasInitialisedThreadSelection = useRef(false)
   const threadMessages = useQuery(
     api.agent_utils.getAgentThreadMessages,
@@ -815,6 +819,7 @@ function RouteComponent() {
       <TableNotifications
         tableName={table}
         currentUserId={user?.data?.userId ?? null}
+        onQueryExecuted={handleRemoteQueryExecuted}
       />
       <Box
         style={{

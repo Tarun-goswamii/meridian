@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import type { ReactNode } from 'react'
 import { useQuery } from 'convex/react'
 import { api } from '@/convex/_generated/api'
 import { notifications } from '@mantine/notifications'
@@ -14,6 +15,7 @@ import { Text, Box } from '@mantine/core'
 interface TableNotificationsProps {
   tableName: string
   currentUserId: string | null
+  onQueryExecuted?: () => void
 }
 
 // Custom notification content using Mantine components for improved styling
@@ -24,7 +26,7 @@ function NotificationContent({
   userName,
   color,
 }: {
-  icon: React.ReactNode
+  icon: ReactNode
   title: string
   message: string
   userName: string
@@ -107,6 +109,7 @@ function NotificationContent({
 export function TableNotifications({
   tableName,
   currentUserId,
+  onQueryExecuted,
 }: TableNotificationsProps) {
   const latestNotification = useQuery(api.notifications.getLatestNotification, {
     tableName,
@@ -224,7 +227,10 @@ export function TableNotifications({
         },
       },
     })
-  }, [latestNotification, currentUserId])
+    if (latestNotification.type === 'query') {
+      onQueryExecuted?.()
+    }
+  }, [latestNotification, currentUserId, onQueryExecuted])
 
   // This component doesn't render anything visible
   return null
