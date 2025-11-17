@@ -326,27 +326,44 @@ export function ChartCanvas({
   onChartMove,
 }: ChartCanvasProps) {
   const canvasRef = useRef<HTMLDivElement>(null)
-  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 })
+  const [canvasSize, setCanvasSize] = useState({ width: 10, height: 10 })
 
-  // Calculate canvas size and ensure charts fit
+  // Calculate canvas size and ensure charts fit using ResizeObserver.
+  // This is more reliable than window 'resize' because it reacts to container changes
+  // (e.g. parent layout changes) and we guard against a zero width/height before
+  // rendering charts to avoid downstream library errors.
   useEffect(() => {
-    const updateCanvasSize = () => {
-      if (canvasRef.current) {
-        const rect = canvasRef.current.getBoundingClientRect()
+    const target = canvasRef.current
+    if (!target) return
+
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const rect = entry.contentRect
         setCanvasSize({
-          width: rect.width - 40, // Account for padding
-          height: rect.height - 40,
+          width: Math.max(0, rect.width - 40), // Account for padding
+          height: Math.max(0, rect.height - 40),
         })
       }
-    }
+    })
 
-    updateCanvasSize()
-    window.addEventListener('resize', updateCanvasSize)
-    return () => window.removeEventListener('resize', updateCanvasSize)
+    // Observe the canvas element
+    ro.observe(target)
+
+    // Initial measurement in case ResizeObserver callback hasn't fired yet
+    const initialRect = target.getBoundingClientRect()
+    setCanvasSize({
+      width: Math.max(0, initialRect.width - 40),
+      height: Math.max(0, initialRect.height - 40),
+    })
+
+    return () => {
+      ro.disconnect()
+    }
+    // Intentionally only depend on the ref - we don't want to re-create observer often
   }, [])
 
   // Constrain chart positions when canvas size changes (only on resize, not on every chart change)
-  const previousCanvasSizeRef = useRef({ width: 0, height: 0 })
+  const previousCanvasSizeRef = useRef({ width: 10, height: 10 })
   useEffect(() => {
     if (canvasSize.width === 0 || canvasSize.height === 0) return
 
@@ -435,15 +452,30 @@ export function ChartCanvas({
         overflow: 'hidden', // Prevent charts from going outside
       }}
     >
-      {charts.map((chart) => (
-        <DraggableChart
-          key={chart.id}
-          chart={chart}
-          onRemove={() => onRemoveChart?.(chart.id)}
-          onMove={(position) => onChartMove?.(chart.id, position)}
-          canvasBounds={canvasSize}
-        />
-      ))}
+      {canvasSize.width <= 0 || canvasSize.height <= 0 ? (
+        <Box
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            minHeight: `${canvasHeight}px`,
+          }}
+        >
+          <Text c="dimmed" size="sm">
+            Measuring container...
+          </Text>
+        </Box>
+      ) : (
+        charts.map((chart) => (
+          <DraggableChart
+            key={chart.id}
+            chart={chart}
+            onRemove={() => onRemoveChart?.(chart.id)}
+            onMove={(position) => onChartMove?.(chart.id, position)}
+            canvasBounds={canvasSize}
+          />
+        ))
+      )}
     </Box>
   )
 }

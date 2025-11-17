@@ -25,6 +25,71 @@ export type ColumnAnalysis = {
   }
 }
 
+// Helper function to retry a query with exponential backoff
+async function retryQuery<T>(
+  queryFn: () => Promise<T>,
+  maxRetries: number = 3,
+  initialDelay: number = 100,
+): Promise<T> {
+  let lastError: Error | null = null
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await queryFn()
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error))
+      
+      // Don't retry on the last attempt
+      if (attempt < maxRetries - 1) {
+        const delay = initialDelay * Math.pow(2, attempt)
+        await new Promise((resolve) => setTimeout(resolve, delay))
+      }
+    }
+  }
+  
+  throw lastError || new Error('Query failed after retries')
+}
+
+// Helper function to limit concurrency
+async function limitConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length)
+  const executing = new Set<Promise<void>>()
+  
+  const processItem = async (item: T, index: number) => {
+    const result = await fn(item)
+    results[index] = result
+  }
+  
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i]
+    const index = i
+    
+    const promise = processItem(item, index).then(
+      () => {
+        executing.delete(promise)
+      },
+      () => {
+        executing.delete(promise)
+      },
+    )
+    
+    executing.add(promise)
+    
+    if (executing.size >= limit) {
+      // Wait for at least one promise to complete
+      await Promise.race(Array.from(executing))
+    }
+  }
+  
+  // Wait for all remaining promises
+  await Promise.all(Array.from(executing))
+  return results
+}
+
 // Helper to sanitize column names for SQL
 function sanitizeColumnName(name: string): string {
   // If column name contains spaces or special chars, quote it
@@ -92,7 +157,9 @@ export async function analyzeColumnWithDuckDB(
       WHERE ${sanitizedCol} IS NOT NULL
     `
 
-    const statsResult = await queryDuckDBAnalytics({ data: statsQuery })
+    const statsResult = await retryQuery(() =>
+      queryDuckDBAnalytics({ data: statsQuery }),
+    )
 
     if (
       !statsResult.rows ||
@@ -152,19 +219,21 @@ export async function analyzeColumnWithDuckDB(
       `
 
       try {
-        const outliersResult = await queryDuckDBAnalytics({
-          data: outliersQuery,
-        })
+        const outliersResult = await retryQuery(
+          () => queryDuckDBAnalytics({ data: outliersQuery }),
+          2, // Fewer retries for non-critical queries
+        )
         outliers = (outliersResult.rows || []).map((row: any) => ({
           value: Number(row.value),
           zScore: Number(row.zscore),
         }))
       } catch (err) {
-        console.error('Error detecting outliers:', err)
+        // Silently fail for non-critical queries
+        // Outliers are nice-to-have, not essential
       }
     }
 
-    // Top and bottom performers
+    // Top and bottom performers (non-critical, fail silently)
     let topPerformers: Array<{ value: number }> = []
     let bottomPerformers: Array<{ value: number }> = []
 
@@ -177,11 +246,19 @@ export async function analyzeColumnWithDuckDB(
         ORDER BY ${sanitizedCol} DESC
         LIMIT 5
       `
-      const topResult = await queryDuckDBAnalytics({ data: topQuery })
+      const topResult = await retryQuery(
+        () => queryDuckDBAnalytics({ data: topQuery }),
+        2, // Fewer retries for non-critical queries
+        200, // Longer initial delay
+      )
       topPerformers = (topResult.rows || []).map((row: any) => ({
         value: Number(row.value),
       }))
+    } catch (err) {
+      // Silently fail - top performers are nice-to-have, not essential
+    }
 
+    try {
       const bottomQuery = `
         WITH data AS (${dataQuery})
         SELECT ${sanitizedCol} as value
@@ -190,12 +267,16 @@ export async function analyzeColumnWithDuckDB(
         ORDER BY ${sanitizedCol} ASC
         LIMIT 5
       `
-      const bottomResult = await queryDuckDBAnalytics({ data: bottomQuery })
+      const bottomResult = await retryQuery(
+        () => queryDuckDBAnalytics({ data: bottomQuery }),
+        2, // Fewer retries for non-critical queries
+        200, // Longer initial delay
+      )
       bottomPerformers = (bottomResult.rows || []).map((row: any) => ({
         value: Number(row.value),
       }))
     } catch (err) {
-      console.error('Error getting top/bottom performers:', err)
+      // Silently fail - bottom performers are nice-to-have, not essential
     }
 
     // Time trend detection (if column name suggests it's a time column)
@@ -246,7 +327,10 @@ export async function analyzeColumnWithDuckDB(
             (MAX(curr_val) - MIN(prev_val)) / NULLIF(MIN(prev_val), 0) * 100 as total_change
           FROM changes
         `
-        const trendResult = await queryDuckDBAnalytics({ data: trendQuery })
+        const trendResult = await retryQuery(
+          () => queryDuckDBAnalytics({ data: trendQuery }),
+          2, // Fewer retries for non-critical queries
+        )
 
         if (trendResult.rows && trendResult.rows.length > 0) {
           const avgChange = trendResult.rows[0].avg_change ?? 0
@@ -295,9 +379,10 @@ export async function analyzeTableWithDuckDB(
   query: string,
   columns: Array<{ name: string; type: string }>,
 ): Promise<ColumnAnalysis[]> {
-  // Analyze columns in parallel
-  const analyses = await Promise.all(
-    columns.map((col) => analyzeColumnWithDuckDB(tableName, query, col)),
+  // Analyze columns with limited concurrency to avoid overwhelming the server
+  // Process 3 columns at a time to balance speed and reliability
+  const analyses = await limitConcurrency(columns, 3, (col) =>
+    analyzeColumnWithDuckDB(tableName, query, col),
   )
 
   return analyses
