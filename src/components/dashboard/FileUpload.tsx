@@ -16,6 +16,7 @@ import { useState } from 'react'
 import { api } from '@/convex/_generated/api'
 import { notifications } from '@mantine/notifications'
 import { useMutation, useAction } from 'convex/react'
+import { useUploadFile } from '@convex-dev/r2/react'
 import { createTableFromJSON, createTableFromCSV } from '@/src/utils/duckdb'
 import { ConvexClient } from 'convex/browser'
 
@@ -29,9 +30,6 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
   const [activeTab, setActiveTab] = useState<string | null>('file')
   const [url, setUrl] = useState('')
   const [prompt, setPrompt] = useState('')
-
-  // Mutation to generate upload URL
-  const generateUploadUrl = useMutation(api.csv.generateUploadUrl)
 
   // Mutation to save file metadata
   const saveFile = useMutation(api.csv.saveFile)
@@ -129,6 +127,9 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
     }
   }
 
+  // R2 upload hook
+  const uploadFile = useUploadFile(api.r2)
+
   const handleDrop = async (acceptedFiles: File[]) => {
     setUploading(true)
     setUploadProgress(0)
@@ -139,19 +140,11 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
       const convexClient = new ConvexClient(CONVEX_URL)
 
       for (const file of acceptedFiles) {
-        // Generate upload URL
-        const uploadUrl = await generateUploadUrl({})
-        setUploadProgress(30)
+        setUploadProgress(20)
 
-        // Upload file to Convex storage
-        const uploadResponse = await fetch(uploadUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': file.type },
-          body: file,
-        })
-        setUploadProgress(60)
-
-        const { storageId } = await uploadResponse.json()
+        // Upload file to Cloudflare R2 via Convex component
+        const storageId = await uploadFile(file)
+        setUploadProgress(50)
 
         // Save file metadata
         const fileId = await saveFile({
@@ -160,18 +153,18 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
           fileType: file.type,
           fileSize: file.size,
         })
-        setUploadProgress(70)
+        setUploadProgress(65)
 
         // Only process CSV files with DuckDB
         if (file.type === 'text/csv' || file.name.endsWith('.csv')) {
           try {
-            // Get the file URL from Convex storage
+            // Get the file URL from Cloudflare R2 via Convex
             const csvUrl = await convexClient.query(api.csv.getFileUrl, {
               storageId,
             })
 
             if (!csvUrl) {
-              throw new Error('Failed to get CSV URL from Convex storage')
+              throw new Error('Failed to get CSV URL from Cloudflare R2')
             }
 
             // Create DuckDB table
@@ -180,7 +173,7 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
               .replace(/[^a-zA-Z0-9_]/g, '_')
               .toLowerCase()
 
-            setUploadProgress(80)
+            setUploadProgress(85)
 
             const result = await createTableFromCSV({
               data: {
@@ -189,7 +182,7 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
               },
             })
 
-            setUploadProgress(90)
+            setUploadProgress(95)
 
             // Update file record with DuckDB table name
             await updateDuckDBInfo({

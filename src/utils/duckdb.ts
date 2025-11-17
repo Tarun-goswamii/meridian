@@ -5,7 +5,7 @@
 // import and then import it and call a route that uses it. Everything will be fine, don't kill yrslf.
 import { DuckDBInstance } from '@duckdb/node-api'
 import { createServerFn, createServerOnlyFn } from '@tanstack/react-start'
-import { writeFileSync, unlinkSync, mkdtempSync } from 'fs'
+import { writeFileSync, unlinkSync, mkdtempSync, mkdirSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 
@@ -15,11 +15,28 @@ let duckDBInstance: DuckDBInstance | null = null
 // const DB_DIR = './tmp'
 // const DB_PATH = join(DB_DIR, 'myduck.db')
 
+// export const getDuckDB = createServerOnlyFn(async () => {
+//   if (!duckDBInstance) {
+//     duckDBInstance = await DuckDBInstance.create(
+//       `md:my_db?token=${process.env.MD_ACCESS_TOKEN}`,
+//     )
+//   }
+//   return duckDBInstance
+// })
+
 export const getDuckDB = createServerOnlyFn(async () => {
   if (!duckDBInstance) {
-    duckDBInstance = await DuckDBInstance.create(
-      `md:my_db?token=${process.env.MD_ACCESS_TOKEN}`,
+    const db = await DuckDBInstance.create(
+      `md:my_db?token=${process.env.MD_ACCESS_TOKEN}&home_directory=/tmp/duck`,
     )
+    const conn = await db.connect()
+
+    mkdirSync('/tmp/duck', { recursive: true })
+
+    conn.run(`SET home_directory = '/tmp/duck'`)
+    conn.run(`SET extension_directory = '/tmp/duck'`)
+    conn.closeSync()
+    duckDBInstance = db
   }
   return duckDBInstance
 })

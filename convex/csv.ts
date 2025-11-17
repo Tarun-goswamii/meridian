@@ -4,13 +4,7 @@ import { type Id } from './_generated/dataModel'
 import { checkAuth } from './authFns'
 import { api } from './_generated/api'
 import Firecrawl from '@mendable/firecrawl-js'
-
-// Generate a URL for uploading a file
-export const generateUploadUrl = mutation({
-  handler: async (ctx) => {
-    return await ctx.storage.generateUploadUrl()
-  },
-})
+import { r2 } from './r2'
 
 // Save file metadata after upload
 export const saveFile = mutation({
@@ -55,8 +49,8 @@ export const getFiles = query({
 // Get file URL
 export const getFileUrl = query({
   args: { storageId: v.string() },
-  handler: async (ctx, args) => {
-    return await ctx.storage.getUrl(args.storageId)
+  handler: async (_, args) => {
+    return await r2.getUrl(args.storageId)
   },
 })
 
@@ -75,10 +69,7 @@ export const getFileForProcessing = query({
       throw new Error('Not authorized to access this file')
     }
 
-    const url = await ctx.storage.getUrl(file.storageId)
-    if (!url) {
-      throw new Error('File URL not available')
-    }
+    const url = await r2.getUrl(file.storageId)
 
     return {
       url,
@@ -104,10 +95,7 @@ export const getFileByTableName = query({
       return null
     }
 
-    const url = await ctx.storage.getUrl(file.storageId)
-    if (!url) {
-      return null
-    }
+    const url = await r2.getUrl(file.storageId)
 
     return {
       fileId: file._id,
@@ -161,7 +149,7 @@ export const deleteFile = mutation({
     }
 
     // Delete from storage
-    await ctx.storage.delete(file.storageId)
+    await r2.deleteObject(ctx, file.storageId)
 
     // Delete from database
     await ctx.db.delete(args.fileId)
@@ -323,7 +311,9 @@ export const createTableFromURL = action({
       const jsonBlob = new Blob([JSON.stringify(extractedData, null, 2)], {
         type: 'application/json',
       })
-      const storageId = await ctx.storage.store(jsonBlob)
+      const storageId = await r2.store(ctx, jsonBlob, {
+        type: 'application/json',
+      })
 
       // Save file metadata
       const fileName = `${sanitizedTableName}.json`
