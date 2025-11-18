@@ -436,12 +436,15 @@ export function QueryTimeline({
                         </Badge>
                       )}
                     </Group>
-                    {!isLast && log.tableName === tableName && (
+                    {log.tableName === tableName && (
                       <Tooltip label="Rollback to after this query" withArrow>
                         <Button
                           size="xs"
                           onClick={() =>
-                            handleRollback(log.sequenceNumber, log.tableName)
+                            handleRollback(
+                              log.sequenceNumber - 1,
+                              log.tableName,
+                            )
                           }
                           loading={isRollingBackToThis}
                           disabled={isRollingBack !== null}

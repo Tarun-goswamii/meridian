@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Box, Paper, Text, ActionIcon, Group, Stack } from '@mantine/core'
 import { IconX, IconGripVertical } from '@tabler/icons-react'
 import {
@@ -8,6 +8,20 @@ import {
   PieChart,
   DonutChart,
 } from '@mantine/charts'
+import '@mantine/charts/styles.css'
+
+/**
+ * New drag & drop implementation using Pointer Events and a canvas-relative
+ * coordinate system. Each chart calculates its position relative to the
+ * canvas bounding rect (from getBoundingClientRect) so dragging works
+ * reliably regardless of scroll/viewport offsets.
+ *
+ * Implementation notes:
+ * - Pointer events are used so touch + mouse work the same.
+ * - On pointerdown we capture the canvas rect and pointer offset and then
+ *   listen to window pointermove/pointerup for robust dragging.
+ * - Positions are constrained to the measured canvas size.
+ */
 
 interface ChartConfig {
   type: 'bar' | 'line' | 'area' | 'pie' | 'scatter' | 'donut'
@@ -18,7 +32,7 @@ interface ChartConfig {
   yAxisKey: string
   series?: Array<{ name: string; color: string }>
   columns?: Array<{ name: string; type: string }>
-  query?: string // Original query used to create the chart
+  query?: string
 }
 
 interface ChartItem {
@@ -33,97 +47,165 @@ interface ChartCanvasProps {
   onChartMove?: (id: string, position: { x: number; y: number }) => void
 }
 
+const CHART_WIDTH = 480
+const CHART_HEIGHT = 370 // chart + header/padding
+
 function DraggableChart({
   chart,
   onRemove,
   onMove,
-  canvasBounds,
+  canvasRef,
 }: {
   chart: ChartItem
   onRemove?: () => void
   onMove?: (position: { x: number; y: number }) => void
-  canvasBounds?: { width: number; height: number }
+  canvasRef: React.RefObject<HTMLDivElement>
 }) {
-  const [isDragging, setIsDragging] = useState(false)
-  const [isHovered, setIsHovered] = useState(false)
   const [position, setPosition] = useState(chart.position)
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
-  const chartRef = useRef<HTMLDivElement>(null)
+  const [isHovered, setIsHovered] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
 
-  const CHART_WIDTH = 480
-  const CHART_HEIGHT = 370 // 300px chart + ~70px header/padding
+  // drag state refs so handlers don't reattach on every render
+  const dragOffsetRef = useRef<{ x: number; y: number } | null>(null)
+  const canvasRectRef = useRef<DOMRect | null>(null)
+  const pointerIdRef = useRef<number | null>(null)
 
   useEffect(() => {
     setPosition(chart.position)
   }, [chart.position])
 
-  // Constrain position within canvas bounds
+  // constrain to canvas bounds (taking into account padding/margins)
+  // When the canvas is smaller than the chart we allow negative positions so the
+  // user can still drag the chart and access its edges. The valid range is
+  // [contentSize - chartSize, 0].
   const constrainPosition = (pos: { x: number; y: number }) => {
-    if (!canvasBounds) return pos
+    const canvasRect = canvasRectRef.current
+    if (!canvasRect) {
+      // fallback to no constraint
+      return pos
+    }
 
-    const minX = 0
-    const minY = 0
-    const maxX = Math.max(0, canvasBounds.width - CHART_WIDTH - 20) // 20px padding
-    const maxY = Math.max(0, canvasBounds.height - CHART_HEIGHT - 20)
+    // canvas content area width/height we allow charts to occupy.
+    const contentWidth = Math.max(0, canvasRect.width - 40) // same padding convention
+    const contentHeight = Math.max(0, canvasRect.height - 40)
+
+    // allow negative min when content is smaller than the chart
+    const minX = Math.min(0, contentWidth - CHART_WIDTH)
+    const minY = Math.min(0, contentHeight - CHART_HEIGHT)
+    const maxX = Math.max(0, contentWidth - CHART_WIDTH)
+    const maxY = Math.max(0, contentHeight - CHART_HEIGHT)
 
     return {
-      x: Math.max(minX, Math.min(maxX, pos.x)),
-      y: Math.max(minY, Math.min(maxY, pos.y)),
+      x: Math.max(minX, Math.min(maxX, Math.round(pos.x))),
+      y: Math.max(minY, Math.min(maxY, Math.round(pos.y))),
     }
   }
 
-  const handleMouseDown = (e: React.MouseEvent) => {
+  // Start dragging only when header/drag handle is pressed
+  const handlePointerDown = (e: React.PointerEvent) => {
+    // only start drag when clicking on drag handle or header
     const target = e.target as HTMLElement
     if (
-      target.closest('[data-drag-handle]') ||
-      target.closest('[data-chart-header]')
+      !target.closest('[data-drag-handle]') &&
+      !target.closest('[data-chart-header]')
     ) {
-      if (target.closest('button') && !target.closest('[data-drag-handle]')) {
-        return
-      }
-
-      setIsDragging(true)
-      setDragStart({
-        x: e.clientX - position.x, // Keep this as offset from current position
-        y: e.clientY - position.y,
-      })
-
-      e.preventDefault()
-      e.stopPropagation()
+      return
     }
+
+    // avoid starting drag when clicking interactive controls (buttons)
+    if (target.closest('button') && !target.closest('[data-drag-handle]')) {
+      return
+    }
+
+    // ensure pointer events are captured
+    // (we'll rely on window listeners, pointer capture isn't strictly necessary here)
+    pointerIdRef.current = e.pointerId
+
+    // read canvas rect at the moment drag starts
+    const canvasEl = canvasRef.current
+    const canvasRect = canvasEl?.getBoundingClientRect() ?? null
+    canvasRectRef.current = canvasRect
+
+    // Calculate offset of pointer inside the chart relative to canvas top-left:
+    // pointerClient - canvasLeft - currentChartPosition = pointer offset inside chart
+    const canvasLeft = canvasRect?.left ?? 0
+    const canvasTop = canvasRect?.top ?? 0
+
+    dragOffsetRef.current = {
+      x: e.clientX - canvasLeft - position.x,
+      y: e.clientY - canvasTop - position.y,
+    }
+
+    setIsDragging(true)
+    // Attach window-level handlers for smooth dragging across the screen
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', handlePointerUp)
+    // prevent text selection / native gestures
+    e.currentTarget.setPointerCapture?.(e.pointerId)
+    e.preventDefault()
+  }
+
+  // pointermove handler as a plain function (attached to window)
+  const handlePointerMove = (e: PointerEvent) => {
+    // ignore moves from other pointers
+    if (pointerIdRef.current != null && e.pointerId !== pointerIdRef.current) {
+      return
+    }
+
+    const canvasRect = canvasRectRef.current
+    const offset = dragOffsetRef.current
+    if (!canvasRect || !offset) return
+
+    const localX = e.clientX - canvasRect.left - offset.x
+    const localY = e.clientY - canvasRect.top - offset.y
+
+    const newPos = constrainPosition({ x: localX, y: localY })
+    setPosition(newPos)
+    onMove?.(newPos)
+  }
+
+  const handlePointerUp = (e: PointerEvent) => {
+    // ignore pointerups from other pointers
+    if (pointerIdRef.current != null && e.pointerId !== pointerIdRef.current) {
+      return
+    }
+
+    // finalize
+    const canvasRect = canvasRectRef.current
+    const offset = dragOffsetRef.current
+    if (canvasRect && offset) {
+      const localX = e.clientX - canvasRect.left - offset.x
+      const localY = e.clientY - canvasRect.top - offset.y
+      const newPos = constrainPosition({ x: localX, y: localY })
+      setPosition(newPos)
+      onMove?.(newPos)
+    }
+
+    // cleanup
+    setIsDragging(false)
+    dragOffsetRef.current = null
+    canvasRectRef.current = null
+    pointerIdRef.current = null
+
+    window.removeEventListener('pointermove', handlePointerMove)
+    window.removeEventListener('pointerup', handlePointerUp)
   }
 
   useEffect(() => {
-    if (!isDragging) return
-
-    const handleMouseMove = (e: MouseEvent) => {
-      const newPosition = constrainPosition({
-        x: e.clientX - dragStart.x,
-        y: e.clientY - dragStart.y,
-      })
-      setPosition(newPosition)
-      onMove?.(newPosition)
-    }
-
-    const handleMouseUp = () => {
-      setIsDragging(false)
-    }
-
-    window.addEventListener('mousemove', handleMouseMove)
-    window.addEventListener('mouseup', handleMouseUp)
-
+    // cleanup in case component unmounts during a drag
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove)
-      window.removeEventListener('mouseup', handleMouseUp)
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', handlePointerUp)
     }
-  }, [isDragging, dragStart, onMove, canvasBounds])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const renderChart = () => {
     const { config } = chart
     const commonProps = {
       data: config.data,
       dataKey: config.dataKey,
-      h: 300,
+      h: 200,
     }
 
     switch (config.type) {
@@ -183,7 +265,7 @@ function DraggableChart({
               value: Number(item[config.yAxisKey] ?? 0),
               color: colors[idx % colors.length],
             }))}
-            h={300}
+            h={200}
           />
         )
       }
@@ -205,12 +287,11 @@ function DraggableChart({
               value: Number(item[config.yAxisKey] ?? 0),
               color: colors[idx % colors.length],
             }))}
-            h={300}
+            h={200}
           />
         )
       }
       case 'scatter':
-        // ScatterChart not available in Mantine charts, use LineChart instead
         return (
           <LineChart
             {...commonProps}
@@ -226,11 +307,6 @@ function DraggableChart({
 
   return (
     <Paper
-      ref={chartRef}
-      shadow={isDragging ? 'xl' : isHovered ? 'lg' : 'sm'}
-      p="md"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
       style={{
         position: 'absolute',
         left: position.x,
@@ -239,18 +315,13 @@ function DraggableChart({
         cursor: isDragging ? 'grabbing' : 'default',
         zIndex: isDragging ? 1000 : isHovered ? 10 : 1,
         userSelect: 'none',
-        transition: isDragging
-          ? 'none'
-          : 'box-shadow 0.2s ease, transform 0.1s ease',
-        transform: isDragging
-          ? 'scale(1.02)'
-          : isHovered
-            ? 'scale(1.01)'
-            : 'scale(1)',
         backgroundColor: 'white',
         border: isHovered ? '1px solid #dee2e6' : '1px solid #e9ecef',
       }}
-      onMouseDown={handleMouseDown}
+      onPointerDown={handlePointerDown}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      p="md"
     >
       <Stack gap="xs">
         <Group
@@ -262,7 +333,7 @@ function DraggableChart({
             padding: '4px 0',
           }}
         >
-          <Group gap="xs" data-drag-handle style={{ flex: 1, minWidth: 0 }}>
+          <Group gap="xs" data-drag-handle style={{ flex: 1 }}>
             <IconGripVertical
               size={16}
               style={{
@@ -283,6 +354,7 @@ function DraggableChart({
               {chart.config.title}
             </Text>
           </Group>
+
           {onRemove && (
             <ActionIcon
               size="sm"
@@ -293,7 +365,8 @@ function DraggableChart({
                 e.preventDefault()
                 onRemove()
               }}
-              onMouseDown={(e) => {
+              onPointerDown={(e) => {
+                // prevent drag from starting when the remove button is pressed
                 e.stopPropagation()
               }}
               style={{
@@ -306,11 +379,15 @@ function DraggableChart({
             </ActionIcon>
           )}
         </Group>
+
         <Box
           style={{
             pointerEvents: isDragging ? 'none' : 'auto',
             width: '100%',
             overflow: 'hidden',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
           }}
         >
           {renderChart()}
@@ -328,91 +405,55 @@ export function ChartCanvas({
   const canvasRef = useRef<HTMLDivElement>(null)
   const [canvasSize, setCanvasSize] = useState({ width: 10, height: 10 })
 
-  // Calculate canvas size and ensure charts fit using ResizeObserver.
-  // This is more reliable than window 'resize' because it reacts to container changes
-  // (e.g. parent layout changes) and we guard against a zero width/height before
-  // rendering charts to avoid downstream library errors.
+  // Measure the canvas size and update on changes
   useEffect(() => {
-    const target = canvasRef.current
-    if (!target) return
+    const el = canvasRef.current
+    if (!el) return
 
     const ro = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const rect = entry.contentRect
         setCanvasSize({
-          width: Math.max(0, rect.width - 40), // Account for padding
+          width: Math.max(0, rect.width - 40),
           height: Math.max(0, rect.height - 40),
         })
       }
     })
+    ro.observe(el)
 
-    // Observe the canvas element
-    ro.observe(target)
-
-    // Initial measurement in case ResizeObserver callback hasn't fired yet
-    const initialRect = target.getBoundingClientRect()
+    // initial measure
+    const r = el.getBoundingClientRect()
     setCanvasSize({
-      width: Math.max(0, initialRect.width - 40),
-      height: Math.max(0, initialRect.height - 40),
+      width: Math.max(0, r.width - 40),
+      height: Math.max(0, r.height - 40),
     })
 
-    return () => {
-      ro.disconnect()
-    }
-    // Intentionally only depend on the ref - we don't want to re-create observer often
+    return () => ro.disconnect()
   }, [])
 
-  // Constrain chart positions when canvas size changes (only on resize, not on every chart change)
-  const previousCanvasSizeRef = useRef({ width: 10, height: 10 })
+  // When the canvas size changes, ensure chart positions remain within bounds.
   useEffect(() => {
+    if (!canvasRef.current) return
     if (canvasSize.width === 0 || canvasSize.height === 0) return
 
-    // Only constrain if canvas size actually changed
-    if (
-      previousCanvasSizeRef.current.width === canvasSize.width &&
-      previousCanvasSizeRef.current.height === canvasSize.height
-    ) {
-      return
-    }
+    const maxX = Math.max(0, canvasSize.width - CHART_WIDTH)
+    const maxY = Math.max(0, canvasSize.height - CHART_HEIGHT)
 
-    previousCanvasSizeRef.current = canvasSize
-
-    const CHART_WIDTH = 480
-    const CHART_HEIGHT = 370
-
-    // Use current charts from state at the time of constraint
-    charts.forEach((chart) => {
-      const maxX = Math.max(0, canvasSize.width - CHART_WIDTH)
-      const maxY = Math.max(0, canvasSize.height - CHART_HEIGHT)
-
-      const constrainedX = Math.max(0, Math.min(maxX, chart.position.x))
-      const constrainedY = Math.max(0, Math.min(maxY, chart.position.y))
-
-      if (
-        constrainedX !== chart.position.x ||
-        constrainedY !== chart.position.y
-      ) {
-        onChartMove?.(chart.id, { x: constrainedX, y: constrainedY })
+    charts.forEach((c) => {
+      const constrainedX = Math.max(0, Math.min(maxX, c.position.x))
+      const constrainedY = Math.max(0, Math.min(maxY, c.position.y))
+      if (constrainedX !== c.position.x || constrainedY !== c.position.y) {
+        onChartMove?.(c.id, { x: constrainedX, y: constrainedY })
       }
     })
+    // only depends on canvasSize
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvasSize]) // Only depend on canvasSize, charts are captured in closure
+  }, [canvasSize])
 
-  // Calculate the required height based on chart positions
   const canvasHeight = useMemo(() => {
-    if (charts.length === 0) {
-      return 400 // Default minimum height
-    }
-
-    // Find the bottommost chart position
-    const maxY = Math.max(...charts.map((chart) => chart.position.y), 0)
-
-    // Chart height (300px) + header (~70px) + padding
-    const chartHeight = 370
-    const requiredHeight = maxY + chartHeight + 60 // Extra padding at bottom
-
-    // Return at least 400px, or the calculated height
-    return Math.max(400, requiredHeight)
+    if (charts.length === 0) return 400
+    const maxY = Math.max(...charts.map((c) => c.position.y), 0)
+    return Math.max(400, maxY + CHART_HEIGHT + 60)
   }, [charts])
 
   if (charts.length === 0) {
@@ -449,7 +490,7 @@ export function ChartCanvas({
         borderRadius: '8px',
         padding: '20px',
         marginTop: '20px',
-        overflow: 'hidden', // Prevent charts from going outside
+        overflow: 'hidden',
       }}
     >
       {canvasSize.width <= 0 || canvasSize.height <= 0 ? (
@@ -471,8 +512,8 @@ export function ChartCanvas({
             key={chart.id}
             chart={chart}
             onRemove={() => onRemoveChart?.(chart.id)}
-            onMove={(position) => onChartMove?.(chart.id, position)}
-            canvasBounds={canvasSize}
+            onMove={(pos) => onChartMove?.(chart.id, pos)}
+            canvasRef={canvasRef as React.RefObject<HTMLDivElement>}
           />
         ))
       )}

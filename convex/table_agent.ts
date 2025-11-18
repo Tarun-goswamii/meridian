@@ -89,7 +89,9 @@ export const fetchDuckDBQuery = action({
   args: { query: v.string() },
   handler: async (_, { query }) => {
     const serverUrl =
-      process.env.SITE_URL || 'https://6c961fbefc99.ngrok-free.app'
+      process.env.SITE_URL !== 'http://localhost:3000'
+        ? process.env.SITE_URL
+        : 'https://fe44843df3a1.ngrok-free.app'
 
     const response = await fetch(`${serverUrl}/api/duckdb/query`, {
       method: 'POST',
@@ -442,7 +444,7 @@ Respond ONLY with a JSON object containing:
 1. "commands": an array of valid DuckDB SQL queries (steps can be split, but use at most 10 per request). Good idea generally to split up a multi-step request.
 2. "description": a concise summary of what the queries do (max 60 words).
 
-Always output valid DuckDB SQL. You also have access to a bunch of tools.
+Always output valid DuckDB SQL. Make sure to split up requests like adding more records or other queries that need a complex or long SQL Query.
 `,
   maxSteps: 4,
   tools: {
@@ -475,7 +477,7 @@ Use the available tools to:
 
 Pick the right tools as needed, then answer clearly and efficiently.
 `,
-  maxSteps: 4,
+  maxSteps: 6,
   tools: {
     queryDuckDB,
     getTableSchema,
@@ -618,14 +620,14 @@ export const askGemini = action({
           : ''
 
       let contextualPrompt = `
-TABLE CONTEXT:
-- Table Name: ${tableName}
-- Columns: ${columnInfo}${sampleData}
+      TABLE CONTEXT:
+      - Table Name: ${tableName}
+      - Columns: ${columnInfo}${sampleData}
 
-USER REQUEST:
-${prompt}
+      USER REQUEST:
+      ${prompt}
 
-Please write a DuckDB SQL queries for the table "${tableName}" based on the user's request above.`
+      Please write a DuckDB SQL queries for the table "${tableName}" based on the user's request above.`
 
       // Ensure Gemini prompt does not exceed limit
       contextualPrompt = trimToLimit(contextualPrompt, GEMINI_PROMPT_LIMIT)
@@ -815,16 +817,16 @@ Please write a DuckDB SQL queries for the table "${tableName}" based on the user
     } else {
       // Analysis mode --------------------------------------------------------------------------------
       let contextualPrompt = `
-You are analyzing the table "${tableName}".
+        You are analyzing the table "${tableName}".
 
-TABLE CONTEXT:
-- Table Name: ${tableName}
-- Columns: ${describeColumns(safeColumns)}
+        TABLE CONTEXT:
+        - Table Name: ${tableName}
+        - Columns: ${describeColumns(safeColumns)}
 
-USER REQUEST:
-${prompt}
+        USER REQUEST:
+        ${prompt}
 
-Use the available tools to explore the database and provide a helpful answer.`
+        Use the available tools to explore the database and provide a helpful answer.`
 
       console.log('PROMPT:', contextualPrompt)
       // Ensure Gemini prompt does not exceed limit
@@ -884,6 +886,7 @@ Use the available tools to explore the database and provide a helpful answer.`
 
       // Process stream parts
       for await (const st_part of stream.fullStream) {
+        console.log('PART:', st_part.type)
         // Handle tool-input-start - tool call is starting
         // Note: tool-input-start uses 'id' field, while tool-call uses 'toolCallId'
         // They should match, so we use the same value for tracking
