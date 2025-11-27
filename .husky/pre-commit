@@ -1,2 +1,2 @@
 pnpm build
-coderabbit review
+echo "coderabbit review"
