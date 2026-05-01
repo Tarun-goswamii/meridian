@@ -5,6 +5,11 @@ import tailwindcss from '@tailwindcss/vite'
 import viteReact from '@vitejs/plugin-react'
 import netlify from '@netlify/vite-plugin-tanstack-start'
 
+const enableNetlify =
+  process.env.NETLIFY === 'true' ||
+  !!process.env.NETLIFY_SITE_ID ||
+  !!process.env.NETLIFY_AUTH_TOKEN
+
 export default defineConfig({
   server: {
     port: 3000,
@@ -18,7 +23,7 @@ export default defineConfig({
       projects: ['./tsconfig.json'],
     }),
     tanstackStart(),
-    netlify(),
+    ...(enableNetlify ? [netlify()] : []),
     viteReact(),
   ],
   optimizeDeps: {
