@@ -38,6 +38,76 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
   // Action to create table from URL
   const createTableFromURL = useAction(api.actions.csvActions.createTableFromURL)
 
+  const handleURLSubmit = async () => {
+    if (!url) {
+      notifications.show({
+        title: 'Missing URL',
+        message: 'Please enter a URL to extract data from',
+        color: 'red',
+      })
+      return
+    }
+
+    if (!prompt) {
+      notifications.show({
+        title: 'Missing Prompt',
+        message: 'Please provide an extraction prompt',
+        color: 'red',
+      })
+      return
+    }
+
+    setUploading(true)
+    setUploadProgress(5)
+
+    try {
+      setUploadProgress(20)
+      // Call server action to extract JSON from the URL
+      const extractResult = await createTableFromURL({ url, prompt })
+      setUploadProgress(50)
+
+      if (!extractResult || !extractResult.data) {
+        throw new Error('No data returned from extraction')
+      }
+
+      // Create DuckDB table from JSON data
+      const jsonCreateResult = await createTableFromJSON({
+        data: extractResult.data,
+        tableName: extractResult.tableName,
+      })
+
+      setUploadProgress(85)
+
+      // Update file record with DuckDB table name (if file was created server-side)
+      if (extractResult.fileId) {
+        await updateDuckDBInfo({
+          fileId: extractResult.fileId,
+          tableName: jsonCreateResult.tableName,
+        })
+      }
+
+      setUploadProgress(100)
+
+      notifications.show({
+        title: 'Extraction Successful',
+        message: `Created DuckDB table "${jsonCreateResult.tableName}" with ${jsonCreateResult.rowCount} rows`,
+        color: 'green',
+      })
+
+      onUploadComplete?.()
+    } catch (error) {
+      console.error('URL extraction error:', error)
+      notifications.show({
+        title: 'Extraction Failed',
+        message: error instanceof Error ? error.message : 'Failed to extract data from URL',
+        color: 'red',
+      })
+    } finally {
+      setUploading(false)
+      setUploadProgress(0)
+    }
+  }
+
   const handleDrop = async (acceptedFiles: File[]) => {
     setUploading(true)
     setUploadProgress(0)

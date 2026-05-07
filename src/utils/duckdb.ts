@@ -17,15 +17,26 @@ const MOTHERDUCK_TOKEN = process.env.MD_ACCESS_TOKEN
 
 export const getDuckDB = createServerOnlyFn(async () => {
   process.env.HOME = '/tmp'
-  if (!MOTHERDUCK_TOKEN) {
-    throw new Error('MD_ACCESS_TOKEN environment variable is required')
-  }
+
   if (!duckDBInstance) {
-    const encodedToken = encodeURIComponent(MOTHERDUCK_TOKEN)
-    duckDBInstance = await DuckDBInstance.create(
-      `md:my_db?token=${encodedToken}`,
-    )
+    if (MOTHERDUCK_TOKEN) {
+      // Use MotherDuck remote instance when token is provided
+      const encodedToken = encodeURIComponent(MOTHERDUCK_TOKEN)
+      duckDBInstance = await DuckDBInstance.create(
+        `md:my_db?token=${encodedToken}`,
+      )
+    } else {
+      // Development fallback: use a local DuckDB instance when no token is set
+      // This prevents throwing during local development and allows creating
+      // temporary in-memory/local DuckDB databases. Note: this DB is ephemeral
+      // and not a replacement for a production MotherDuck instance.
+      console.warn(
+        'MD_ACCESS_TOKEN not set — falling back to local DuckDB instance for development',
+      )
+      duckDBInstance = await DuckDBInstance.create()
+    }
   }
+
   return duckDBInstance
 })
 
