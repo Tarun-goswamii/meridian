@@ -1,14 +1,18 @@
 import { tanstackStart } from '@tanstack/react-start/plugin/vite'
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import tsConfigPaths from 'vite-tsconfig-paths'
 import tailwindcss from '@tailwindcss/vite'
 import viteReact from '@vitejs/plugin-react'
 import netlify from '@netlify/vite-plugin-tanstack-start'
 
+
+const shouldUseNetlify = Boolean(process.env.NETLIFY_SITE_ID || process.env.NETLIFY)
+
 const enableNetlify =
   process.env.NETLIFY === 'true' ||
   !!process.env.NETLIFY_SITE_ID ||
   !!process.env.NETLIFY_AUTH_TOKEN
+
 
 export default defineConfig({
   server: {
@@ -23,9 +27,13 @@ export default defineConfig({
       projects: ['./tsconfig.json'],
     }),
     tanstackStart(),
+
+    shouldUseNetlify ? netlify() : null,
+
     ...(enableNetlify ? [netlify()] : []),
+
     viteReact(),
-  ],
+  ].filter(Boolean) as Plugin[],
   optimizeDeps: {
     exclude: ['@duckdb/node-bindings'],
   },
