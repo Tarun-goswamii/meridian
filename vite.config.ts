@@ -31,5 +31,19 @@ export default defineConfig({
   },
   ssr: {
     noExternal: ['@convex-dev/presence'], // Force external resolution
+    external: [
+      'node:events',
+      'node:stream',
+      'node:util',
+      'node:crypto',
+      'node:buffer',
+      'node:path',
+      'node:fs',
+      'node:os',
+      'node:http',
+      'node:https',
+      'node:net',
+      'node:zlib',
+    ],
   },
 })

@@ -169,9 +169,12 @@ export function QueryTimeline({
       await queryDuckDB({ data: `DROP TABLE IF EXISTS ${sanitizedTableName}` })
 
       // Recreate from CSV
+      if (!fileInfo?.fileContent) {
+        throw new Error('Original file content is unavailable')
+      }
       await createTableFromCSV({
         data: {
-          csvUrl: fileInfo.url,
+          csvContent: fileInfo.fileContent,
           tableName: sanitizedTableName,
         },
       })

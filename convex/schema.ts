@@ -16,6 +16,7 @@ export default defineSchema({
     fileName: v.string(),
     fileType: v.string(),
     fileSize: v.number(),
+    fileContent: v.optional(v.string()),
     uploadedBy: v.string(),
     uploadedAt: v.number(),
     duckdbTableName: v.optional(v.string()),

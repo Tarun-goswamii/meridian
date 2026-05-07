@@ -30,14 +30,12 @@ import {
   IconCheck,
 } from '@tabler/icons-react'
 import { motion } from 'motion/react'
-import { useAuthActions } from '@convex-dev/auth/react'
 
 export const Route = createFileRoute('/features')({
   component: RouteComponent,
 })
 
 function RouteComponent() {
-  const { signIn } = useAuthActions()
 
   const mainFeatures = [
     {
@@ -368,9 +366,6 @@ function RouteComponent() {
                   radius="xl"
                   component={Link}
                   to="/dashboard"
-                  onClick={() =>
-                    void signIn('github', { redirectTo: '/dashboard' })
-                  }
                   rightSection={<IconArrowRight size={18} />}
                 >
                   Get Started Free

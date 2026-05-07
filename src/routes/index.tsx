@@ -30,15 +30,12 @@ import {
 } from '@tabler/icons-react'
 import { motion } from 'motion/react'
 import { PricingTable } from 'autumn-js/react'
-import { useAuthActions } from '@convex-dev/auth/react'
 
 export const Route = createFileRoute('/')({
   component: RouteComponent,
 })
 
 function RouteComponent() {
-  const { signIn } = useAuthActions()
-
   const features = [
     {
       icon: IconUpload,
@@ -192,9 +189,6 @@ function RouteComponent() {
                 radius="xl"
                 component={Link}
                 to="/dashboard"
-                onClick={() =>
-                  void signIn('github', { redirectTo: '/dashboard' })
-                }
                 leftSection={<IconBolt size={20} />}
                 rightSection={<IconArrowRight size={18} />}
               >
@@ -445,9 +439,6 @@ function RouteComponent() {
                   radius="xl"
                   component={Link}
                   to="/dashboard"
-                  onClick={() =>
-                    void signIn('github', { redirectTo: '/dashboard' })
-                  }
                   leftSection={<IconBolt size={20} />}
                   rightSection={<IconArrowRight size={18} />}
                 >

@@ -50,7 +50,6 @@ import {
 } from '@tabler/icons-react'
 import { useMutation } from 'convex/react'
 import { useEffect, useState } from 'react'
-import { useAuthActions } from '@convex-dev/auth/react'
 
 export const Route = createFileRoute('/_authed/dashboard')({
   component: Home,
@@ -61,7 +60,6 @@ function Home() {
   const [sidebarTab, setSidebarTab] = useState('activity')
   const [searchOpened, setSearchOpened] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
-  const { signOut } = useAuthActions()
 
   // Get current user
   const { data: user } = useSuspenseQuery(
@@ -341,14 +339,6 @@ function Home() {
                   </Menu.Item>
                   <Menu.Item leftSection={<IconSettings size={16} />}>
                     Settings
-                  </Menu.Item>
-                  <Menu.Divider />
-                  <Menu.Item
-                    color="red"
-                    leftSection={<IconLogout size={16} />}
-                    onClick={() => void signOut()}
-                  >
-                    Sign out
                   </Menu.Item>
                 </Menu.Dropdown>
               </Menu>
@@ -748,7 +738,7 @@ function Home() {
         centered
       >
         <Text size="sm" c="dimmed" mb="md">
-          Upload CSV, XLSX, or XLS files to get started
+          Upload CSV files to get started
         </Text>
         <FileUpload onUploadComplete={handleUploadComplete} />
       </Modal>

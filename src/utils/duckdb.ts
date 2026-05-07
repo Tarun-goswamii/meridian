@@ -78,22 +78,14 @@ export const queryDuckDB = createServerFn()
   })
 
 export const createTableFromCSV = createServerFn()
-  .inputValidator((input: { csvUrl: string; tableName: string }) => input)
+  .inputValidator((input: { csvContent: string; tableName: string }) => input)
   .handler(async ({ data }) => {
-    const { csvUrl, tableName } = data
+    const { csvContent, tableName } = data
     let tempFilePath: string | null = null
 
     try {
       const db = await getDuckDB()
       const connection = await db.connect()
-
-      // Fetch CSV content from Cloudflare R2 URL
-      const response = await fetch(csvUrl)
-      if (!response.ok) {
-        throw new Error(`Failed to fetch CSV: ${response.statusText}`)
-      }
-
-      const csvContent = await response.text()
 
       // Create a temporary file for the CSV
       const tempDir = mkdtempSync(join(tmpdir(), 'duckdb-csv-'))
