@@ -16,9 +16,7 @@ import { useState } from 'react'
 import { api } from '@/convex/_generated/api'
 import { notifications } from '@mantine/notifications'
 import { useMutation, useAction } from 'convex/react'
-import { useUploadFile } from '@convex-dev/r2/react'
 import { createTableFromJSON, createTableFromCSV } from '@/src/utils/duckdb'
-import { ConvexClient } from 'convex/browser'
 
 interface FileUploadProps {
   onUploadComplete?: () => void
@@ -38,135 +36,32 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
   const updateDuckDBInfo = useMutation(api.csv.updateDuckDBInfo)
 
   // Action to create table from URL
-  const createTableFromURL = useAction(api.csv.createTableFromURL)
-
-  const handleURLSubmit = async () => {
-    if (!url.trim()) {
-      notifications.show({
-        title: 'Invalid URL',
-        message: 'Please enter a valid URL',
-        color: 'red',
-      })
-      return
-    }
-
-    if (!prompt.trim()) {
-      notifications.show({
-        title: 'Prompt Required',
-        message: 'Please enter a prompt describing what data to extract',
-        color: 'red',
-      })
-      return
-    }
-
-    setUploading(true)
-    setUploadProgress(0)
-
-    try {
-      setUploadProgress(20)
-
-      // Call the action to extract data and create CSV
-      const result = await createTableFromURL({
-        url: url.trim(),
-        prompt: prompt.trim(),
-      })
-
-      setUploadProgress(60)
-
-      if (!result.success || !result.data) {
-        throw new Error('Failed to extract data from URL')
-      }
-
-      // Create DuckDB table directly from JSON data
-      const tableResult = await createTableFromJSON({
-        data: {
-          data: result.data,
-          tableName: result.tableName,
-        },
-      })
-
-      setUploadProgress(90)
-
-      // Update file record with DuckDB table name
-      await updateDuckDBInfo({
-        fileId: result.fileId,
-        tableName: tableResult.tableName,
-      })
-
-      console.log(
-        `DuckDB table created: ${tableResult.tableName} with ${tableResult.rowCount} rows`,
-      )
-
-      notifications.show({
-        title: 'Table Created',
-        message: `Created DuckDB table "${tableResult.tableName}" with ${tableResult.rowCount} rows from URL`,
-        color: 'green',
-      })
-
-      setUploadProgress(100)
-
-      // Reset form
-      setUrl('')
-      setPrompt('')
-
-      // Call the callback if provided
-      onUploadComplete?.()
-    } catch (error) {
-      console.error('URL extraction error:', error)
-      notifications.show({
-        title: 'Extraction Failed',
-        message:
-          error instanceof Error
-            ? error.message
-            : 'Failed to extract data from URL',
-        color: 'red',
-      })
-    } finally {
-      setUploading(false)
-      setUploadProgress(0)
-    }
-  }
-
-  // R2 upload hook
-  const uploadFile = useUploadFile(api.r2)
+  const createTableFromURL = useAction(api.actions.csvActions.createTableFromURL)
 
   const handleDrop = async (acceptedFiles: File[]) => {
     setUploading(true)
     setUploadProgress(0)
 
     try {
-      // Get Convex URL from environment
-      const CONVEX_URL = (import.meta as any).env.VITE_CONVEX_URL!
-      const convexClient = new ConvexClient(CONVEX_URL)
-
       for (const file of acceptedFiles) {
         setUploadProgress(20)
 
-        // Upload file to Cloudflare R2 via Convex component
-        const storageId = await uploadFile(file)
-        setUploadProgress(50)
+        // Read file as text
+        const fileContent = await file.text()
+        setUploadProgress(40)
 
-        // Save file metadata
+        // Save file with content directly in Convex
         const fileId = await saveFile({
-          storageId,
           fileName: file.name,
           fileType: file.type,
           fileSize: file.size,
+          fileContent, // Store CSV content directly
         })
         setUploadProgress(65)
 
         // Only process CSV files with DuckDB
         if (file.type === 'text/csv' || file.name.endsWith('.csv')) {
           try {
-            // Get the file URL from Cloudflare R2 via Convex
-            const csvUrl = await convexClient.query(api.csv.getFileUrl, {
-              storageId,
-            })
-
-            if (!csvUrl) {
-              throw new Error('Failed to get CSV URL from Cloudflare R2')
-            }
-
             // Create DuckDB table
             const tableName = file.name
               .replace(/\.csv$/i, '')
@@ -177,7 +72,7 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
 
             const result = await createTableFromCSV({
               data: {
-                csvUrl,
+                csvContent: fileContent,
                 tableName,
               },
             })
@@ -254,12 +149,12 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
               onReject={() => {
                 notifications.show({
                   title: 'Invalid File',
-                  message: 'Please upload valid files',
+                  message: 'Please upload a valid CSV file',
                   color: 'red',
                 })
               }}
               maxSize={10 * 1024 ** 2} // 10MB
-              accept={[MIME_TYPES.csv, MIME_TYPES.xlsx, MIME_TYPES.xls]}
+              accept={[MIME_TYPES.csv]}
               loading={uploading}
             >
               <Group
@@ -304,7 +199,7 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
                     {'Drag files here or click to select'}
                   </Text>
                   <Text size="sm" c="dimmed" inline mt={7}>
-                    Attach CSV, XLSX, or XLS files (max 10MB each)
+                    Attach CSV files (max 10MB each)
                   </Text>
                 </div>
               </Group>

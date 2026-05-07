@@ -26,14 +26,12 @@ import {
   IconChartBar,
 } from '@tabler/icons-react'
 import { motion } from 'motion/react'
-import { useAuthActions } from '@convex-dev/auth/react'
 
 export const Route = createFileRoute('/about')({
   component: RouteComponent,
 })
 
 function RouteComponent() {
-  const { signIn } = useAuthActions()
 
   const values = [
     {
@@ -413,9 +411,6 @@ function RouteComponent() {
                     radius="xl"
                     component={Link}
                     to="/dashboard"
-                    onClick={() =>
-                      void signIn('github', { redirectTo: '/dashboard' })
-                    }
                     rightSection={<IconArrowRight size={18} />}
                   >
                     Get Started Free

@@ -476,7 +476,7 @@ export const firecrawlSearch: any = createTool({
     try {
       const maxResults = Math.min(Math.max(args.maxResults || 10, 1), 20)
       const result = await ctx.runAction(
-        api.table_agent.performFirecrawlSearch,
+        api.actions.tableAgentActions.performFirecrawlSearch,
         {
           query: args.query,
           maxResults,
@@ -525,7 +525,7 @@ export const scrapeWebPage: any = createTool({
   }),
   handler: async (ctx, args) => {
     try {
-      const result = await ctx.runAction(api.table_agent.scrapeWebPageAction, {
+      const result = await ctx.runAction(api.actions.tableAgentActions.scrapeWebPageAction, {
         url: args.url,
         includeMarkdown: args.includeMarkdown,
       })
@@ -577,7 +577,7 @@ export const extractWebPage: any = createTool({
   }),
   handler: async (ctx, args) => {
     try {
-      const result = await ctx.runAction(api.table_agent.extractWebPageAction, {
+      const result = await ctx.runAction(api.actions.tableAgentActions.extractWebPageAction, {
         urls: args.urls,
         prompt: args.prompt,
         schema: args.schema,

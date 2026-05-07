@@ -1,32 +1,27 @@
 import { query } from './_generated/server'
-import { getAuthUserId } from '@convex-dev/auth/server'
 
 // Write your Convex functions in any file inside this directory (`convex`).
 // See https://docs.convex.dev/functions for more.
+
+// Dummy user ID for no-auth mode
+const DUMMY_USER_ID = 'anonymous_user'
 
 // Check current user authentication status
 export const currentUser = query({
   args: {},
   handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx)
-    if (!userId) {
-      return { isAuthenticated: false, userId: null }
-    }
-
-    const user = await ctx.db.query('users').first()
+    // Always return authenticated with dummy user
     return {
       isAuthenticated: true,
-      userId,
-      name: user?.name,
-      email: user?.email,
-      image: user?.image,
+      userId: DUMMY_USER_ID,
+      name: 'Guest User',
+      email: 'guest@example.com',
+      image: null,
     }
   },
 })
 
 export async function checkAuth(ctx: any) {
-  const user_id = await getAuthUserId(ctx)
-
-  if (!user_id) throw new Error('Not authenticated')
-  return user_id
+  // Always return dummy user ID - no auth required
+  return DUMMY_USER_ID
 }

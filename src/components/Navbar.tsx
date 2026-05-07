@@ -1,4 +1,3 @@
-import { useAuthActions } from '@convex-dev/auth/react'
 import { useSuspenseQuery } from '@tanstack/react-query'
 import { convexQuery } from '@convex-dev/react-query'
 import { api } from '@/convex/_generated/api'
@@ -19,7 +18,6 @@ import {
   Image,
 } from '@mantine/core'
 import {
-  IconLogout,
   IconUser,
   IconChevronDown,
   IconDashboard,
@@ -30,14 +28,11 @@ import { Link, useLocation } from '@tanstack/react-router'
 import { useState } from 'react'
 
 export function Navbar({ authed }: { authed?: boolean }) {
-  const { signIn, signOut } = useAuthActions()
   const { data: user } = useSuspenseQuery(
     convexQuery(api.authFns.currentUser, {}),
   )
   const location = useLocation()
   const [drawerOpened, setDrawerOpened] = useState(false)
-
-  const isAuthenticated = user?.isAuthenticated
 
   const navLinks = [
     { to: '/features', label: 'Features', icon: IconChartBar },
@@ -76,10 +71,9 @@ export function Navbar({ authed }: { authed?: boolean }) {
             </Link>
           </Group>
 
-          {isAuthenticated && (
-            <Menu shadow="md" width={200} position="bottom-end">
-              <Menu.Target>
-                <Button
+          <Menu shadow="md" width={200} position="bottom-end">
+            <Menu.Target>
+              <Button
                   variant="default"
                   leftSection={
                     <Avatar
@@ -111,17 +105,8 @@ export function Navbar({ authed }: { authed?: boolean }) {
                 >
                   Profile
                 </Menu.Item>
-                <Menu.Divider />
-                <Menu.Item
-                  color="red"
-                  leftSection={<IconLogout style={{ width: 16, height: 16 }} />}
-                  onClick={() => void signOut()}
-                >
-                  Sign out
-                </Menu.Item>
               </Menu.Dropdown>
             </Menu>
-          )}
         </Group>
       </Box>
     )
@@ -177,12 +162,11 @@ export function Navbar({ authed }: { authed?: boolean }) {
           </Flex>
 
           <Group gap="sm" visibleFrom="md">
-            {isAuthenticated ? (
-              <>
-                <Button
-                  component={Link}
-                  to="/dashboard"
-                  variant="subtle"
+            <>
+              <Button
+                component={Link}
+                to="/dashboard"
+                variant="subtle"
                   leftSection={<IconDashboard size={16} />}
                 >
                   Dashboard
@@ -223,44 +207,9 @@ export function Navbar({ authed }: { authed?: boolean }) {
                     >
                       Profile
                     </Menu.Item>
-                    <Menu.Divider />
-                    <Menu.Item
-                      color="red"
-                      leftSection={
-                        <IconLogout style={{ width: 16, height: 16 }} />
-                      }
-                      onClick={() => void signOut()}
-                    >
-                      Sign out
-                    </Menu.Item>
                   </Menu.Dropdown>
                 </Menu>
               </>
-            ) : (
-              <>
-                <Button variant="subtle" component={Link} to="/features">
-                  Features
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() =>
-                    void signIn('github', { redirectTo: '/dashboard' })
-                  }
-                  style={{ fontWeight: 500 }}
-                >
-                  Sign In
-                </Button>
-                <Button
-                  component={Link}
-                  to="/dashboard"
-                  onClick={() =>
-                    void signIn('github', { redirectTo: '/dashboard' })
-                  }
-                >
-                  Get Started
-                </Button>
-              </>
-            )}
           </Group>
 
           <Burger
@@ -291,41 +240,15 @@ export function Navbar({ authed }: { authed?: boolean }) {
               onClick={() => setDrawerOpened(false)}
             />
           ))}
-          {isAuthenticated ? (
-            <>
-              <NavLink
-                component={Link}
-                to="/dashboard"
-                label="Dashboard"
-                leftSection={<IconDashboard size={16} />}
-                onClick={() => setDrawerOpened(false)}
-              />
-              <Button
-                variant="outline"
-                color="red"
-                leftSection={<IconLogout size={16} />}
-                onClick={() => {
-                  void signOut()
-                  setDrawerOpened(false)
-                }}
-                fullWidth
-                mt="md"
-              >
-                Sign out
-              </Button>
-            </>
-          ) : (
-            <Button
-              fullWidth
-              mt="md"
-              onClick={() => {
-                void signIn('github', { redirectTo: '/dashboard' })
-                setDrawerOpened(false)
-              }}
-            >
-              Get Started
-            </Button>
-          )}
+          <>
+            <NavLink
+              component={Link}
+              to="/dashboard"
+              label="Dashboard"
+              leftSection={<IconDashboard size={16} />}
+              onClick={() => setDrawerOpened(false)}
+            />
+          </>
         </Stack>
       </Drawer>
     </Box>
